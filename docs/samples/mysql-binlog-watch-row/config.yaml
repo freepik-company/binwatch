@@ -1,0 +1,17 @@
+---
+sources:
+  mysql:
+    host: "127.0.0.1"
+    port: 3306
+    user: "root"
+    password: "MiContrasenaSegura"
+    database: ""
+    server_id: 100
+    read_timeout: 90
+    heathbeat_period: 60
+    flavor: mysql
+    sync_timeout_ms: 200
+
+connectors:
+  webhook:
+    enabled: true
