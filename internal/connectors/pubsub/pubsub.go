@@ -7,44 +7,44 @@ import (
 	"go.uber.org/zap"
 )
 
-func Send(ctx v1alpha1.Context, jsonData []byte) {
+func Send(app v1alpha1.Application, jsonData []byte) {
 
-	logger := ctx.Logger
+	logger := app.Logger
 
 	logger.Debug("Sending message to pubsub", zap.String("data", string(jsonData)))
 
 	// Create the PubSub client
-	pubsubClient, err := pubsub.NewClient(ctx.Context, ctx.Config.Connectors.PubSub.ProjectID)
+	pubsubClient, err := pubsub.NewClient(app.Context, app.Config.Connectors.PubSub.ProjectID)
 	if err != nil {
 		logger.Error("Error creating PubSub client", zap.Error(err))
 	}
 	defer pubsubClient.Close()
 
 	// Get the topic
-	topic := pubsubClient.Topic(ctx.Config.Connectors.PubSub.TopicID)
+	topic := pubsubClient.Topic(app.Config.Connectors.PubSub.TopicID)
 
 	// Add row data to the template injected
 	templateInjectedObject := map[string]interface{}{}
 	templateInjectedObject["rowJSON"] = jsonData
 
 	// Evaluate the data template with the injected object
-	parsedMessage, err := template.EvaluateTemplate(ctx.Config.Connectors.Data, templateInjectedObject)
+	parsedMessage, err := template.EvaluateTemplate(app.Config.Connectors.Data, templateInjectedObject)
 	if err != nil {
 		logger.Error("Error evaluating template for webhook integration", zap.Error(err))
 	}
 
 	// Publish the message
-	result := topic.Publish(ctx.Context, &pubsub.Message{
+	result := topic.Publish(app.Context, &pubsub.Message{
 		Data: []byte(parsedMessage),
 	})
 
 	// Wait for confirmation
-	id, err := result.Get(ctx.Context)
+	id, err := result.Get(app.Context)
 	if err != nil {
 		logger.Error("Error publishing message to pubsub", zap.Error(err))
 	}
 
-	logger.Debug("Message published to pubsub", zap.String("topic", ctx.Config.Connectors.PubSub.TopicID),
-		zap.String("project", ctx.Config.Connectors.PubSub.ProjectID), zap.String("id", id))
+	logger.Debug("Message published to pubsub", zap.String("topic", app.Config.Connectors.PubSub.TopicID),
+		zap.String("project", app.Config.Connectors.PubSub.ProjectID), zap.String("id", id))
 
 }

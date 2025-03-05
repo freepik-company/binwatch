@@ -3,6 +3,7 @@ package mysql
 import (
 	"binwatch/internal/connectors/pubsub"
 	"binwatch/internal/connectors/webhook"
+	"binwatch/internal/hashring"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -29,21 +30,21 @@ var (
 )
 
 // Función principal para capturar el binlog
-func Watcher(ctx v1alpha1.Context) {
+func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 
 	// Get configuration from the context
-	host := ctx.Config.Sources.MySQL.Host
-	port := ctx.Config.Sources.MySQL.Port
-	user := ctx.Config.Sources.MySQL.User
-	password := ctx.Config.Sources.MySQL.Password
-	serverID := ctx.Config.Sources.MySQL.ServerID
-	flavor := ctx.Config.Sources.MySQL.Flavor
-	readTimeout := ctx.Config.Sources.MySQL.ReadTimeout
-	heartbeatPeriod := ctx.Config.Sources.MySQL.HeartbeatPeriod
+	host := app.Config.Sources.MySQL.Host
+	port := app.Config.Sources.MySQL.Port
+	user := app.Config.Sources.MySQL.User
+	password := app.Config.Sources.MySQL.Password
+	serverID := app.Config.Sources.MySQL.ServerID
+	flavor := app.Config.Sources.MySQL.Flavor
+	readTimeout := app.Config.Sources.MySQL.ReadTimeout
+	heartbeatPeriod := app.Config.Sources.MySQL.HeartbeatPeriod
 
-	logger := ctx.Logger
+	logger := app.Logger
 
-	syncTimeoutMs := ctx.Config.Sources.MySQL.SyncTimeoutMs
+	syncTimeoutMs := app.Config.Sources.MySQL.SyncTimeoutMs
 
 	// Get the current binlog position
 	err := getMasterStatus(host, port, user, password)
@@ -77,10 +78,10 @@ func Watcher(ctx v1alpha1.Context) {
 	for {
 
 		// Set timeout for processing events
-		sqlctx, cancel := context.WithTimeout(context.Background(), time.Duration(syncTimeoutMs)*time.Millisecond)
+		sqlapp, cancel := context.WithTimeout(context.Background(), time.Duration(syncTimeoutMs)*time.Millisecond)
 
 		// Get the next event
-		ev, err := streamer.GetEvent(sqlctx)
+		ev, err := streamer.GetEvent(sqlapp)
 		cancel()
 
 		// Handle errors
@@ -98,8 +99,8 @@ func Watcher(ctx v1alpha1.Context) {
 
 		// Filter database and table included in the configuration
 		// By default watch all tables
-		if len(ctx.Config.Sources.MySQL.FilterTables) > 0 {
-			ok, err := filterEvent(ctx, ev)
+		if len(app.Config.Sources.MySQL.FilterTables) > 0 {
+			ok, err := filterEvent(app, ev)
 			if err != nil {
 				logger.Info("Error filtering event", zap.Error(err))
 			}
@@ -116,6 +117,14 @@ func Watcher(ctx v1alpha1.Context) {
 
 			// Get the query and print it
 			query := string(e.Query)
+
+			// Check if the server assigned to the event is the current server
+			severAssigned := ring.GetServer(fmt.Sprintf("%v-%s", e.ExecutionTime, query))
+			if app.Server != severAssigned {
+				app.Logger.Debug("Server not assigned", zap.String("server_assigned", severAssigned))
+				continue
+			}
+
 			logger.Info("Executed query for Schema", zap.String("schema", string(e.Schema)), zap.String("query", query))
 
 			// If the query is an ALTER TABLE, clean up the memory used for the table metadata, so when an insert
@@ -149,6 +158,13 @@ func Watcher(ctx v1alpha1.Context) {
 			schemaName := string(e.Schema)
 			tableName := string(e.Table)
 
+			// Check if the server assigned to the event is the current server
+			severAssigned := ring.GetServer(fmt.Sprintf("%v-%s", time.Now(), tableName))
+			if app.Server != severAssigned {
+				app.Logger.Debug("Server not assigned", zap.String("server_assigned", severAssigned))
+				continue
+			}
+
 			logger.Info("TableMapEvent detected", zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID))
 
 			// Check if table metadata is already stored in memory
@@ -173,6 +189,13 @@ func Watcher(ctx v1alpha1.Context) {
 			tableID := e.TableID
 			schemaName := string(e.Table.Schema)
 			tableName := string(e.Table.Table)
+
+			// Check if the server assigned to the event is the current server
+			severAssigned := ring.GetServer(fmt.Sprintf("%v-%s", time.Now(), tableName))
+			if app.Server != severAssigned {
+				app.Logger.Debug("Server not assigned", zap.String("server_assigned", severAssigned))
+				continue
+			}
 
 			// Get the column names from memory, if not exists, skip the event (it must exist so always before a
 			// RowsEvent there is a TableMapEvent)
@@ -232,7 +255,7 @@ func Watcher(ctx v1alpha1.Context) {
 				logger.Debug("JSON data", zap.String("data", string(jsonData)))
 
 				// Send the JSON data to connectors
-				executeConnectors(ctx, jsonData)
+				executeConnectors(app, jsonData)
 			}
 		}
 	}
@@ -283,7 +306,7 @@ func getMasterStatus(host string, port uint16, user, password string) (err error
 }
 
 // Function to filter the events based on the configuration
-func filterEvent(ctx v1alpha1.Context, ev *replication.BinlogEvent) (bool, error) {
+func filterEvent(app v1alpha1.Application, ev *replication.BinlogEvent) (bool, error) {
 
 	// Get the event schema and table
 	schema := ""
@@ -300,7 +323,7 @@ func filterEvent(ctx v1alpha1.Context, ev *replication.BinlogEvent) (bool, error
 	}
 
 	// Iterate over the filter tables
-	for _, filter := range ctx.Config.Sources.MySQL.FilterTables {
+	for _, filter := range app.Config.Sources.MySQL.FilterTables {
 
 		// Check if the event schema and table matches the filter
 		if filter.Database == schema && filter.Table == table {
@@ -311,15 +334,15 @@ func filterEvent(ctx v1alpha1.Context, ev *replication.BinlogEvent) (bool, error
 	return false, nil
 }
 
-func executeConnectors(ctx v1alpha1.Context, jsonData []byte) {
+func executeConnectors(app v1alpha1.Application, jsonData []byte) {
 
 	// Send the JSON data to connectors
-	if !reflect.DeepEqual(ctx.Config.Connectors.WebHook, v1alpha1.WebHookConfig{}) {
-		go webhook.Send(ctx, jsonData)
+	if !reflect.DeepEqual(app.Config.Connectors.WebHook, v1alpha1.WebHookConfig{}) {
+		go webhook.Send(app, jsonData)
 	}
 
-	if !reflect.DeepEqual(ctx.Config.Connectors.PubSub, v1alpha1.PubSubConfig{}) {
-		go pubsub.Send(ctx, jsonData)
+	if !reflect.DeepEqual(app.Config.Connectors.PubSub, v1alpha1.PubSubConfig{}) {
+		go pubsub.Send(app, jsonData)
 	}
 
 }

@@ -5,6 +5,25 @@ type ConfigSpec struct {
 	Logger     LoggerConfig     `yaml:"logger"`
 	Sources    SourcesConfig    `yaml:"sources"`
 	Connectors ConnectorsConfig `yaml:"connectors"`
+	Hashring   HashringConfig   `yaml:"hashring"`
+}
+
+// HashringConfig
+type HashringConfig struct {
+	EnvFlag             string                 `yaml:"env_flag"`
+	SyncWorkerTimeMs    int                    `yaml:"sync_worker_time_ms"`
+	DnsRingDiscovery    DnsDiscoveryRingConfig `yaml:"dns_ring_discovery"`
+	StaticRingDiscovery StaticRingConfig       `yaml:"static_ring_discovery"`
+}
+
+// StaticRingConfig
+type StaticRingConfig struct {
+	Hosts []string `yaml:"hosts"`
+}
+
+// DnsDiscoveryConfig
+type DnsDiscoveryRingConfig struct {
+	Domain string `yaml:"domain"`
 }
 
 // LoggerConfig

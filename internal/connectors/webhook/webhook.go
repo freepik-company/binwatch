@@ -11,35 +11,35 @@ import (
 	"net/http"
 )
 
-func Send(ctx v1alpha1.Context, jsonData []byte) {
+func Send(app v1alpha1.Application, jsonData []byte) {
 
-	logger := ctx.Logger
+	logger := app.Logger
 
 	logger.Debug("Sending webhook", zap.String("data", string(jsonData)))
 	// Create the HTTP client
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: ctx.Config.Connectors.WebHook.TlsSkipVerify,
+				InsecureSkipVerify: app.Config.Connectors.WebHook.TlsSkipVerify,
 			},
 		},
 	}
 
 	// Create the request with the configured verb and URL
-	httpRequest, err := http.NewRequest(ctx.Config.Connectors.WebHook.Method, ctx.Config.Connectors.WebHook.URL, nil)
+	httpRequest, err := http.NewRequest(app.Config.Connectors.WebHook.Method, app.Config.Connectors.WebHook.URL, nil)
 	if err != nil {
 		logger.Error("Error creating HTTP Request for webhook integration", zap.Error(err))
 	}
 
 	// Add headers to the request if set
 	httpRequest.Header.Set("Content-Type", "application/json")
-	for headerKey, headerValue := range ctx.Config.Connectors.WebHook.Headers {
+	for headerKey, headerValue := range app.Config.Connectors.WebHook.Headers {
 		httpRequest.Header.Set(headerKey, headerValue)
 	}
 
 	// Add authentication if set for the webhook
-	if ctx.Config.Connectors.WebHook.Credentials.Username != "" && ctx.Config.Connectors.WebHook.Credentials.Password != "" {
-		httpRequest.SetBasicAuth(ctx.Config.Connectors.WebHook.Credentials.Username, ctx.Config.Connectors.WebHook.Credentials.Password)
+	if app.Config.Connectors.WebHook.Credentials.Username != "" && app.Config.Connectors.WebHook.Credentials.Password != "" {
+		httpRequest.SetBasicAuth(app.Config.Connectors.WebHook.Credentials.Username, app.Config.Connectors.WebHook.Credentials.Password)
 	}
 
 	// Parse jsonData to a map
@@ -54,7 +54,7 @@ func Send(ctx v1alpha1.Context, jsonData []byte) {
 	templateInjectedObject["data"] = data
 
 	// Evaluate the data template with the injected object
-	parsedMessage, err := template.EvaluateTemplate(ctx.Config.Connectors.Data, templateInjectedObject)
+	parsedMessage, err := template.EvaluateTemplate(app.Config.Connectors.Data, templateInjectedObject)
 	if err != nil {
 		logger.Error("Error evaluating template for webhook integration", zap.Error(err))
 	}

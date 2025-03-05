@@ -3,11 +3,14 @@ package watch
 import (
 	"binwatch/api/v1alpha1"
 	"binwatch/internal/config"
+	"binwatch/internal/hashring"
 	"binwatch/internal/sources/mysql"
 	"context"
 	"go.uber.org/zap/zapcore"
 	"log"
+	"os"
 	"reflect"
+	"time"
 
 	"strings"
 
@@ -88,17 +91,36 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 	}
 
 	// Configure application's context
-	ctx := v1alpha1.Context{
+	app := v1alpha1.Application{
 		Config:  &v1alpha1.ConfigSpec{},
 		Logger:  logger,
 		Context: context.Background(),
+		Server:  "",
 	}
 
 	// Set the configuration inside the global context
-	ctx.Config = &configContent
+	app.Config = &configContent
+
+	// Add server to the Hashring
+	hr := hashring.NewHashRing(1000)
+	go hr.SyncWorker(&app, time.Duration(app.Config.Hashring.SyncWorkerTimeMs)*time.Millisecond)
+
+	for {
+		if len(hr.GetServerList()) != 0 {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	// Get server name and add it to logs
+	app.Server = os.Getenv("HOSTNAME")
+	if app.Config.Hashring.EnvFlag != "" {
+		app.Server = os.Getenv(app.Config.Hashring.EnvFlag)
+	}
+	app.Logger = app.Logger.With(zap.String("server", app.Server))
 
 	// Run MySQL Watcher if MySQL config is present
-	if !reflect.DeepEqual(ctx.Config.Sources.MySQL, v1alpha1.MySQLConfig{}) {
-		mysql.Watcher(ctx)
+	if !reflect.DeepEqual(app.Config.Sources.MySQL, v1alpha1.MySQLConfig{}) {
+		mysql.Watcher(app, hr)
 	}
 }

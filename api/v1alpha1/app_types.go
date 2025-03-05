@@ -6,8 +6,9 @@ import (
 )
 
 // Context TODO
-type Context struct {
+type Application struct {
 	Config  *ConfigSpec
 	Logger  *zap.Logger
 	Context context.Context
+	Server  string
 }
