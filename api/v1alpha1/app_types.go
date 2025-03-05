@@ -10,5 +10,4 @@ type Application struct {
 	Config  *ConfigSpec
 	Logger  *zap.Logger
 	Context context.Context
-	Server  string
 }

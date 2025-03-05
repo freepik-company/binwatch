@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func Send(app v1alpha1.Application, jsonData []byte) {
+func Send(app v1alpha1.Application, templateData string, jsonData []byte) {
 
 	logger := app.Logger
 
@@ -17,6 +17,7 @@ func Send(app v1alpha1.Application, jsonData []byte) {
 	pubsubClient, err := pubsub.NewClient(app.Context, app.Config.Connectors.PubSub.ProjectID)
 	if err != nil {
 		logger.Error("Error creating PubSub client", zap.Error(err))
+		return
 	}
 	defer pubsubClient.Close()
 
@@ -28,9 +29,10 @@ func Send(app v1alpha1.Application, jsonData []byte) {
 	templateInjectedObject["rowJSON"] = jsonData
 
 	// Evaluate the data template with the injected object
-	parsedMessage, err := template.EvaluateTemplate(app.Config.Connectors.Data, templateInjectedObject)
+	parsedMessage, err := template.EvaluateTemplate(templateData, templateInjectedObject)
 	if err != nil {
 		logger.Error("Error evaluating template for webhook integration", zap.Error(err))
+		return
 	}
 
 	// Publish the message
@@ -42,6 +44,7 @@ func Send(app v1alpha1.Application, jsonData []byte) {
 	id, err := result.Get(app.Context)
 	if err != nil {
 		logger.Error("Error publishing message to pubsub", zap.Error(err))
+		return
 	}
 
 	logger.Debug("Message published to pubsub", zap.String("topic", app.Config.Connectors.PubSub.TopicID),

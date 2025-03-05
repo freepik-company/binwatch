@@ -13,8 +13,14 @@ import (
 // TODO
 func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration) {
 
+	if reflect.ValueOf(app.Config.Hashring).IsZero() {
+		app.Logger.Info("No hashring configuration found")
+		return
+	}
+
 	if !reflect.ValueOf(app.Config.Hashring.StaticRingDiscovery).IsZero() && !reflect.ValueOf(app.Config.Hashring.DnsRingDiscovery).IsZero() {
 		app.Logger.Fatal("Just select one discovery method, please")
+		return
 	}
 
 	for {

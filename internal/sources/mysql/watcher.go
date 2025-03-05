@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -109,6 +110,16 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 			}
 		}
 
+		// Check if the server assigned to the event is the current server
+		if !reflect.ValueOf(app.Config.Hashring).IsZero() {
+			t := time.Now()
+			severAssigned := ring.GetServer(t.Format("20060102150405"))
+			if app.Config.ServerName != severAssigned {
+				app.Logger.Debug("Server not assigned", zap.String("server_assigned", severAssigned))
+				continue
+			}
+		}
+
 		// Handle the event
 		switch e := ev.Event.(type) {
 
@@ -117,13 +128,6 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 
 			// Get the query and print it
 			query := string(e.Query)
-
-			// Check if the server assigned to the event is the current server
-			severAssigned := ring.GetServer(fmt.Sprintf("%v-%s", e.ExecutionTime, query))
-			if app.Server != severAssigned {
-				app.Logger.Debug("Server not assigned", zap.String("server_assigned", severAssigned))
-				continue
-			}
 
 			logger.Info("Executed query for Schema", zap.String("schema", string(e.Schema)), zap.String("query", query))
 
@@ -158,13 +162,6 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 			schemaName := string(e.Schema)
 			tableName := string(e.Table)
 
-			// Check if the server assigned to the event is the current server
-			severAssigned := ring.GetServer(fmt.Sprintf("%v-%s", time.Now(), tableName))
-			if app.Server != severAssigned {
-				app.Logger.Debug("Server not assigned", zap.String("server_assigned", severAssigned))
-				continue
-			}
-
 			logger.Info("TableMapEvent detected", zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID))
 
 			// Check if table metadata is already stored in memory
@@ -189,13 +186,6 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 			tableID := e.TableID
 			schemaName := string(e.Table.Schema)
 			tableName := string(e.Table.Table)
-
-			// Check if the server assigned to the event is the current server
-			severAssigned := ring.GetServer(fmt.Sprintf("%v-%s", time.Now(), tableName))
-			if app.Server != severAssigned {
-				app.Logger.Debug("Server not assigned", zap.String("server_assigned", severAssigned))
-				continue
-			}
 
 			// Get the column names from memory, if not exists, skip the event (it must exist so always before a
 			// RowsEvent there is a TableMapEvent)
@@ -255,7 +245,7 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 				logger.Debug("JSON data", zap.String("data", string(jsonData)))
 
 				// Send the JSON data to connectors
-				executeConnectors(app, jsonData)
+				executeConnectors(app, eventStr, jsonData)
 			}
 		}
 	}
@@ -334,15 +324,21 @@ func filterEvent(app v1alpha1.Application, ev *replication.BinlogEvent) (bool, e
 	return false, nil
 }
 
-func executeConnectors(app v1alpha1.Application, jsonData []byte) {
+func executeConnectors(app v1alpha1.Application, eventStr string, jsonData []byte) {
 
-	// Send the JSON data to connectors
-	if !reflect.DeepEqual(app.Config.Connectors.WebHook, v1alpha1.WebHookConfig{}) {
-		go webhook.Send(app, jsonData)
-	}
+	event := strings.ToLower(eventStr)
 
-	if !reflect.DeepEqual(app.Config.Connectors.PubSub, v1alpha1.PubSubConfig{}) {
-		go pubsub.Send(app, jsonData)
+	for _, connector := range app.Config.Connectors.Routes {
+		if slices.Contains(connector.Events, event) && connector.Connector == "webhook" {
+			app.Logger.Debug("Sending data to webhook connector", zap.String("connector", connector.Connector),
+				zap.String("data", string(jsonData)), zap.String("event", event))
+			go webhook.Send(app, connector.Data, jsonData)
+		}
+		if slices.Contains(connector.Events, event) && connector.Connector == "pubsub" {
+			app.Logger.Debug("Sending data to pubsub connector", zap.String("connector", connector.Connector),
+				zap.String("data", string(jsonData)), zap.String("event", event))
+			go pubsub.Send(app, connector.Data, jsonData)
+		}
 	}
 
 }

@@ -11,7 +11,7 @@ import (
 	"net/http"
 )
 
-func Send(app v1alpha1.Application, jsonData []byte) {
+func Send(app v1alpha1.Application, templateData string, jsonData []byte) {
 
 	logger := app.Logger
 
@@ -29,6 +29,7 @@ func Send(app v1alpha1.Application, jsonData []byte) {
 	httpRequest, err := http.NewRequest(app.Config.Connectors.WebHook.Method, app.Config.Connectors.WebHook.URL, nil)
 	if err != nil {
 		logger.Error("Error creating HTTP Request for webhook integration", zap.Error(err))
+		return
 	}
 
 	// Add headers to the request if set
@@ -54,9 +55,10 @@ func Send(app v1alpha1.Application, jsonData []byte) {
 	templateInjectedObject["data"] = data
 
 	// Evaluate the data template with the injected object
-	parsedMessage, err := template.EvaluateTemplate(app.Config.Connectors.Data, templateInjectedObject)
+	parsedMessage, err := template.EvaluateTemplate(templateData, templateInjectedObject)
 	if err != nil {
 		logger.Error("Error evaluating template for webhook integration", zap.Error(err))
+		return
 	}
 
 	// Add data to the payload of the request
@@ -67,6 +69,7 @@ func Send(app v1alpha1.Application, jsonData []byte) {
 	httpResponse, err := httpClient.Do(httpRequest)
 	if err != nil {
 		logger.Error("Error sending HTTP request for webhook integration", zap.Error(err))
+		return
 	}
 
 	defer httpResponse.Body.Close()

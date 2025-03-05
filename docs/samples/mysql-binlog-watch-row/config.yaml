@@ -9,23 +9,25 @@ logger:
   # console or json
   encoding: json
 
+# Server name of the binwatch instance
+server_name: "$HOSTNAME"
+
+# Hashring configuration
 hashring:
+
+  # Sync worker time in milliseconds to sync the ring nodes when a new node is added or removed from the ring
   sync_worker_time_ms: 300
 
-  # Environment variable to determine if this node has to execute the sync worker
-  env_flag: "HOSTNAME"
-
-  # For static ring discovery we need to define the hostname of the nodes, so we will check if
-  # $HOSTNAME env variable (by default) is the same as configured here.
+  # For static ring discovery we need to define the server names that are part of the ring
   static_ring_discovery:
     hosts:
     - test
     - test2
 
   # For DNS ring discovery we need to define the domain and the port of the headless service to get
-  # the list of nodes.
-#  dns_ring_discovery:
-#    domain: "dns.example.com"
+  # the list of server names that are part of the ring
+  # dns_ring_discovery:
+  #   domain: "dns.example.com"
 
 # Sources configuration
 # List of sources to watch for changes in the database binlog
@@ -62,9 +64,15 @@ sources:
 # List of connectors to send the data to
 connectors:
 
-  # Data format to send to the connector. Helm Templating is supported
-  data: |
-    {{- printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
+  routes:
+    - events: ["insert", "update"]
+      connector: pubsub
+      data: |
+        {{- printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
+    - events: ["delete"]
+      connector: webhook
+      data: |
+        {{- printf `{ "index": "test", "id": %v }` .data.id }}
 
   # PubSub connector configuration
   pubsub:
@@ -74,7 +82,7 @@ connectors:
   # Webhook connector configuration
   webhook:
     tls_skip_verify: false
-    url: "https://webhook.site/4d857c1c-9162-4858-b2db-f056f79b24f6"
+    url: "https://webhook.site/8892311e-8163-404b-aab0-aa935db1c374"
     method: "POST"
     headers:
       X-BinWatch: "true"

@@ -6,11 +6,11 @@ type ConfigSpec struct {
 	Sources    SourcesConfig    `yaml:"sources"`
 	Connectors ConnectorsConfig `yaml:"connectors"`
 	Hashring   HashringConfig   `yaml:"hashring"`
+	ServerName string           `yaml:"server_name"`
 }
 
 // HashringConfig
 type HashringConfig struct {
-	EnvFlag             string                 `yaml:"env_flag"`
 	SyncWorkerTimeMs    int                    `yaml:"sync_worker_time_ms"`
 	DnsRingDiscovery    DnsDiscoveryRingConfig `yaml:"dns_ring_discovery"`
 	StaticRingDiscovery StaticRingConfig       `yaml:"static_ring_discovery"`
@@ -61,7 +61,14 @@ type FilterTable struct {
 type ConnectorsConfig struct {
 	WebHook WebHookConfig `yaml:"webhook"`
 	PubSub  PubSubConfig  `yaml:"pubsub"`
-	Data    string        `json:"data"`
+	Routes  []RouteConfig `yaml:"routes"`
+}
+
+// RouteConfig
+type RouteConfig struct {
+	Events    []string `yaml:"events"`
+	Connector string   `yaml:"connector"`
+	Data      string   `yaml:"data"`
 }
 
 // WebHookConfig

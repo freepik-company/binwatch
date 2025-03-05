@@ -8,7 +8,6 @@ import (
 	"context"
 	"go.uber.org/zap/zapcore"
 	"log"
-	"os"
 	"reflect"
 	"time"
 
@@ -95,7 +94,6 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 		Config:  &v1alpha1.ConfigSpec{},
 		Logger:  logger,
 		Context: context.Background(),
-		Server:  "",
 	}
 
 	// Set the configuration inside the global context
@@ -105,19 +103,20 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 	hr := hashring.NewHashRing(1000)
 	go hr.SyncWorker(&app, time.Duration(app.Config.Hashring.SyncWorkerTimeMs)*time.Millisecond)
 
-	for {
-		if len(hr.GetServerList()) != 0 {
-			break
+	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
+		for {
+			if len(hr.GetServerList()) != 0 {
+				break
+			}
+			time.Sleep(1 * time.Second)
 		}
-		time.Sleep(1 * time.Second)
 	}
 
 	// Get server name and add it to logs
-	app.Server = os.Getenv("HOSTNAME")
-	if app.Config.Hashring.EnvFlag != "" {
-		app.Server = os.Getenv(app.Config.Hashring.EnvFlag)
+	if app.Config.ServerName == "" {
+		log.Fatalf("Server name is required")
 	}
-	app.Logger = app.Logger.With(zap.String("server", app.Server))
+	app.Logger = app.Logger.With(zap.String("server", app.Config.ServerName))
 
 	// Run MySQL Watcher if MySQL config is present
 	if !reflect.DeepEqual(app.Config.Sources.MySQL, v1alpha1.MySQLConfig{}) {
