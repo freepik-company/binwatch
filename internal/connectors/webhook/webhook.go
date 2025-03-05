@@ -5,6 +5,7 @@ import (
 	"binwatch/internal/template"
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
@@ -41,9 +42,16 @@ func Send(ctx v1alpha1.Context, jsonData []byte) {
 		httpRequest.SetBasicAuth(ctx.Config.Connectors.WebHook.Credentials.Username, ctx.Config.Connectors.WebHook.Credentials.Password)
 	}
 
+	// Parse jsonData to a map
+	data := map[string]interface{}{}
+	err = json.Unmarshal(jsonData, &data)
+	if err != nil {
+		logger.Error("Error parsing JSON data for webhook integration", zap.Error(err))
+	}
+
 	// Add row data to the template injected
 	templateInjectedObject := map[string]interface{}{}
-	templateInjectedObject["rowJSON"] = jsonData
+	templateInjectedObject["data"] = data
 
 	// Evaluate the data template with the injected object
 	parsedMessage, err := template.EvaluateTemplate(ctx.Config.Connectors.Data, templateInjectedObject)

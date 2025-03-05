@@ -23,7 +23,7 @@ sources:
 
 connectors:
   data: |
-    {{- printf `{ "index": "test", "id": "1", "data": %s}` .rowJSON }}
+    {{- printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
 
   pubsub:
     project_id: "test-project"
