@@ -1,12 +1,14 @@
 package mysql
 
 import (
+	"binwatch/internal/connectors/pubsub"
 	"binwatch/internal/connectors/webhook"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	"go.uber.org/zap"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -37,17 +39,19 @@ func Watcher(ctx v1alpha1.Context) {
 	serverID := ctx.Config.Sources.MySQL.ServerID
 	flavor := ctx.Config.Sources.MySQL.Flavor
 	readTimeout := ctx.Config.Sources.MySQL.ReadTimeout
-	heartbeatPeriod := ctx.Config.Sources.MySQL.HearthbeatPeriod
+	heartbeatPeriod := ctx.Config.Sources.MySQL.HeartbeatPeriod
+
+	logger := ctx.Logger
 
 	syncTimeoutMs := ctx.Config.Sources.MySQL.SyncTimeoutMs
 
 	// Get the current binlog position
 	err := getMasterStatus(host, port, user, password)
 	if err != nil {
-		log.Fatalf("Error getting actual position of binlog: %v", err)
+		logger.Error("Error getting actual position of binlog", zap.Error(err))
 	}
 	defer db.Close()
-	fmt.Printf("📌 Starting binlog capture from: %s @ %d\n", *binLogFile, *binLogPos)
+	logger.Info("Starting binlog capture", zap.String("binlog_file", *binLogFile), zap.Uint32("binlog_pos", *binLogPos))
 
 	// configure the MySQL connection
 	cfg := replication.BinlogSyncerConfig{
@@ -66,7 +70,7 @@ func Watcher(ctx v1alpha1.Context) {
 	pos := mysql.Position{Name: *binLogFile, Pos: *binLogPos}
 	streamer, err := syncer.StartSync(pos)
 	if err != nil {
-		log.Fatalf("Error starting sync for binlogs: %v", err)
+		logger.Error("Error starting sync for binlogs", zap.Error(err))
 	}
 
 	// Process the events
@@ -88,8 +92,20 @@ func Watcher(ctx v1alpha1.Context) {
 			}
 
 			// Handle other errors
-			log.Printf("Error getting the event: %v", err)
+			logger.Info("Error getting the event", zap.Error(err))
 			continue
+		}
+
+		// Filter database and table included in the configuration
+		// By default watch all tables
+		if len(ctx.Config.Sources.MySQL.FilterTables) > 0 {
+			ok, err := filterEvent(ctx, ev)
+			if err != nil {
+				logger.Info("Error filtering event", zap.Error(err))
+			}
+			if !ok {
+				continue
+			}
 		}
 
 		// Handle the event
@@ -100,7 +116,7 @@ func Watcher(ctx v1alpha1.Context) {
 
 			// Get the query and print it
 			query := string(e.Query)
-			fmt.Printf("📌 Executed query for Schema: %s\nQuery: %s\n", string(e.Schema), query)
+			logger.Info("Executed query for Schema", zap.String("schema", string(e.Schema)), zap.String("query", query))
 
 			// If the query is an ALTER TABLE, clean up the memory used for the table metadata, so when an insert
 			// is executed, the tableID is increased by one.
@@ -111,14 +127,16 @@ func Watcher(ctx v1alpha1.Context) {
 				tableName := strings.Trim(matches[1], "`")
 
 				// Get the column names
+				// Print the message to get to know the user that the columns are being retrieved from MySQL so it's a query
+				logger.Info("Getting columns for table", zap.String("table", tableName))
 				columnNames, err := getColumnNames(string(e.Schema), tableName)
 				if err != nil {
-					log.Printf("❌ Error getting columns after ALTER TABLE: %v\n", err)
+					logger.Info("Error getting columns after ALTER TABLE", zap.Error(err))
 				}
 
 				// Replace table columns in memory
 				tableMetadata[tableName] = columnNames
-				fmt.Printf("✅ Updated metadata for table '%s': %v\n", tableName, columnNames)
+				logger.Info("Updated metadata for table", zap.String("table", tableName), zap.Strings("columns", columnNames))
 
 			}
 
@@ -131,7 +149,7 @@ func Watcher(ctx v1alpha1.Context) {
 			schemaName := string(e.Schema)
 			tableName := string(e.Table)
 
-			fmt.Printf("📌 TableMapEvent detected: %s.%s (Table ID: %d)\n", schemaName, tableName, tableID)
+			logger.Info("TableMapEvent detected", zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID))
 
 			// Check if table metadata is already stored in memory
 			_, exists := tableMetadata[tableName]
@@ -140,11 +158,11 @@ func Watcher(ctx v1alpha1.Context) {
 				// If not exists, get the column names and store them in memory
 				columnNames, err := getColumnNames(schemaName, tableName)
 				if err != nil {
-					log.Printf("❌ Error getting table columns: %v\n", err)
+					logger.Info("Error getting columns for table", zap.String("table", tableName), zap.Error(err))
 				}
 
 				tableMetadata[tableName] = columnNames
-				fmt.Printf("✅ Finded columns: %v\n", columnNames)
+				logger.Info("Found columns for table", zap.String("table", tableName), zap.Strings("columns", columnNames))
 
 			}
 
@@ -160,7 +178,7 @@ func Watcher(ctx v1alpha1.Context) {
 			// RowsEvent there is a TableMapEvent)
 			columnNames, ok := tableMetadata[tableName]
 			if !ok {
-				fmt.Println("⚠️ Not found table metadata in memory.")
+				logger.Info("Not found table metadata in memory", zap.String("table", tableName))
 				continue
 			}
 
@@ -176,7 +194,7 @@ func Watcher(ctx v1alpha1.Context) {
 				eventStr = "DELETE"
 			}
 
-			fmt.Printf("🔥 Found event %s in table `%s.%s` with ID: %d\n", eventStr, schemaName, tableName, tableID)
+			logger.Info("Found event", zap.String("event", eventStr), zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID))
 
 			// For UPDATE, the event receives the values in pairs (OLD, NEW), so we only take the NEW values
 			// For INSERT and DELETE, the event receives the values directly
@@ -206,14 +224,15 @@ func Watcher(ctx v1alpha1.Context) {
 				// Convert the row to JSON
 				jsonData, err := json.Marshal(rowMap)
 				if err != nil {
-					log.Println("Error marshaling json data:", err)
+					logger.Info("Error marshaling json data", zap.Error(err))
 					continue
 				}
 
 				// Print the JSON data
-				if ctx.Config.Connectors.Webhook.Enabled {
-					webhook.Send(jsonData)
-				}
+				logger.Debug("JSON data", zap.String("data", string(jsonData)))
+
+				// Send the JSON data to connectors
+				executeConnectors(ctx, jsonData)
 			}
 		}
 	}
@@ -221,9 +240,6 @@ func Watcher(ctx v1alpha1.Context) {
 
 // Function to get the column names of a table
 func getColumnNames(schema, table string) ([]string, error) {
-
-	// Print the message to get to know the user that the columns are being retrieved from MySQL so it's a query
-	fmt.Printf("🔍 Getting columns for table '%s.%s' from database...\n", schema, table)
 
 	// Query to get the columns
 	query := fmt.Sprintf("SHOW COLUMNS FROM `%s`.`%s`", schema, table)
@@ -264,4 +280,46 @@ func getMasterStatus(host string, port uint16, user, password string) (err error
 	}
 
 	return err
+}
+
+// Function to filter the events based on the configuration
+func filterEvent(ctx v1alpha1.Context, ev *replication.BinlogEvent) (bool, error) {
+
+	// Get the event schema and table
+	schema := ""
+	table := ""
+	switch e := ev.Event.(type) {
+	case *replication.QueryEvent:
+		schema = string(e.Schema)
+	case *replication.TableMapEvent:
+		schema = string(e.Schema)
+		table = string(e.Table)
+	case *replication.RowsEvent:
+		schema = string(e.Table.Schema)
+		table = string(e.Table.Table)
+	}
+
+	// Iterate over the filter tables
+	for _, filter := range ctx.Config.Sources.MySQL.FilterTables {
+
+		// Check if the event schema and table matches the filter
+		if filter.Database == schema && filter.Table == table {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func executeConnectors(ctx v1alpha1.Context, jsonData []byte) {
+
+	// Send the JSON data to connectors
+	if !reflect.DeepEqual(ctx.Config.Connectors.WebHook, v1alpha1.WebHookConfig{}) {
+		go webhook.Send(ctx, jsonData)
+	}
+
+	if !reflect.DeepEqual(ctx.Config.Connectors.PubSub, v1alpha1.PubSubConfig{}) {
+		go pubsub.Send(ctx, jsonData)
+	}
+
 }

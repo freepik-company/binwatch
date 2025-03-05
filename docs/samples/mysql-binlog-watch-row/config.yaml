@@ -1,17 +1,37 @@
 ---
+logger:
+  # debug, info, warn, error, dpanic, panic, fatal
+  level: debug
+  # console or json
+  encoding: json
+
 sources:
   mysql:
     host: "127.0.0.1"
     port: 3306
     user: "root"
     password: "MiContrasenaSegura"
-    database: ""
     server_id: 100
     read_timeout: 90
-    heathbeat_period: 60
+    heartbeat_period: 60
     flavor: mysql
     sync_timeout_ms: 200
+    # Just listen for events in this database-table pairs
+    filter_tables:
+      - database: test
+        table: test
 
 connectors:
+  data: |
+    {{- printf `{ "index": "test", "id": "1", "data": %s}` .rowJSON }}
+
+  pubsub:
+    project_id: "test-project"
+    topic_id: "test-topic"
+
   webhook:
-    enabled: true
+    tls_skip_verify: false
+    url: "https://webhook.site/id"
+    method: "POST"
+    headers:
+      X-BinWatch: "true"

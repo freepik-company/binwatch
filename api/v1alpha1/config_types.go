@@ -1,24 +1,67 @@
 package v1alpha1
 
-// Configuration struct
+// ConfigSpec
 type ConfigSpec struct {
-	Sources struct {
-		MySQL struct {
-			SyncTimeoutMs    int    `yaml:"sync_timeout_ms"`
-			Host             string `yaml:"host"`
-			Port             uint16 `yaml:"port"`
-			User             string `yaml:"user"`
-			Password         string `yaml:"password"`
-			Database         string `yaml:"database"`
-			ServerID         uint32 `yaml:"server_id"`
-			Flavor           string `yaml:"flavor"`
-			ReadTimeout      int    `yaml:"read_timeout"`
-			HearthbeatPeriod int    `yaml:"hearthbeat_period"`
-		} `yaml:"mysql"`
-	} `yaml:"sources"`
-	Connectors struct {
-		Webhook struct {
-			Enabled bool `yaml:"enabled"`
-		} `yaml:"webhook"`
-	} `yaml:"connectors"`
+	Logger     LoggerConfig     `yaml:"logger"`
+	Sources    SourcesConfig    `yaml:"sources"`
+	Connectors ConnectorsConfig `yaml:"connectors"`
+}
+
+// LoggerConfig
+type LoggerConfig struct {
+	Encoding string `yaml:"encoding"`
+	Level    string `yaml:"level"`
+}
+
+// SourcesConfig
+type SourcesConfig struct {
+	MySQL MySQLConfig `yaml:"mysql"`
+}
+
+// MySQLConfig
+type MySQLConfig struct {
+	SyncTimeoutMs   int           `yaml:"sync_timeout_ms"`
+	Host            string        `yaml:"host"`
+	Port            uint16        `yaml:"port"`
+	User            string        `yaml:"user"`
+	Password        string        `yaml:"password"`
+	ServerID        uint32        `yaml:"server_id"`
+	Flavor          string        `yaml:"flavor"`
+	ReadTimeout     int           `yaml:"read_timeout"`
+	HeartbeatPeriod int           `yaml:"heartbeat_period"`
+	FilterTables    []FilterTable `yaml:"filter_tables"`
+}
+
+// FilterTable
+type FilterTable struct {
+	Database string `yaml:"database"`
+	Table    string `yaml:"table"`
+}
+
+// ConnectorsConfig
+type ConnectorsConfig struct {
+	WebHook WebHookConfig `yaml:"webhook"`
+	PubSub  PubSubConfig  `yaml:"pubsub"`
+	Data    string        `json:"data"`
+}
+
+// WebHookConfig
+type WebHookConfig struct {
+	URL           string            `yaml:"url"`
+	Method        string            `yaml:"method"`
+	Headers       map[string]string `yaml:"headers"`
+	Credentials   Credentials       `yaml:"credentials"`
+	TlsSkipVerify bool              `yaml:"tls_skip_verify"`
+}
+
+// Credentials
+type Credentials struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
+// PubSubConfig
+type PubSubConfig struct {
+	ProjectID string `yaml:"project_id"`
+	TopicID   string `yaml:"topic_id"`
 }
