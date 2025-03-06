@@ -28,8 +28,16 @@ type ConfigSpec struct {
 // HashringConfig
 type HashringConfig struct {
 	SyncWorkerTimeMs    int                    `yaml:"sync_worker_time_ms"`
+	HealthCheck         HealthCheckConfig      `yaml:"health_check"`
 	DnsRingDiscovery    DnsDiscoveryRingConfig `yaml:"dns_ring_discovery"`
 	StaticRingDiscovery StaticRingConfig       `yaml:"static_ring_discovery"`
+}
+
+// HealthCheckConfig
+type HealthCheckConfig struct {
+	Type    string `yaml:"type"`
+	Path    string `yaml:"path"`
+	Timeout int    `yaml:"timeout"`
 }
 
 // StaticRingConfig

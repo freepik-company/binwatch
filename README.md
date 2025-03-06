@@ -40,6 +40,15 @@ hashring:
   # Sync worker time in milliseconds to sync the ring nodes when a new node is added or removed from the ring
   sync_worker_time_ms: 300
 
+  # Health check configuration for the hashring
+  health_check:
+    # Health check type. Supported types are http and icmp
+    type: icmp
+    # Just needed for http health check. The path to check the health of the server
+    # path: "/health"
+    # Timeout in seconds for the health check
+    timeout: 1
+    
   # For static ring discovery we need to define the server names that are part of the ring
   static_ring_discovery:
     hosts:
@@ -200,6 +209,9 @@ configMap:
         
       hashring:
         sync_worker_time_ms: 300
+        health_check:
+          type: icmp
+          timeout: 1
         dns_ring_discovery:
           domain: "binwatch-headless.binwatch.svc.cluster.local"
       

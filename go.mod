@@ -7,6 +7,7 @@ require (
 	github.com/BurntSushi/toml v1.3.2
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/go-mysql-org/go-mysql v1.11.0
+	github.com/go-ping/ping v1.2.0
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/spf13/cobra v1.9.1
 	go.uber.org/zap v1.27.0
