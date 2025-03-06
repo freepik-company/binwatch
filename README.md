@@ -131,6 +131,111 @@ helm repo add binwatch https://freepik-company.github.io/binwatch/
 helm install binwatch binwatch/binwatch
 ```
 
+Example `values.yaml` file for helm deploying:
+```yaml
+replicaCount: 2
+
+image:
+  repository: ghcr.io/freepik-company/binwatch
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  annotations: {}
+
+headlessService:
+  enabled: true
+
+resources:
+   limits:
+     memory: 256Mi
+   requests:
+     cpu: 100m
+     memory: 256Mi
+
+volumes:
+  - name: config-volume
+    configMap:
+      name: binwatch-config
+      items:
+        - key: config.yaml
+          path: config.yaml
+
+volumeMounts:
+  - name: config-volume
+    mountPath: /app/config.yaml
+    subPath: config.yaml
+    readOnly: true
+
+env:
+  - name: POD_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.podIP
+  - name: MYSQL_HOST
+    value: mysql
+  - name: MYSQL_PORT
+    value: "3306"
+  - name: MYSQL_USER
+    value: root
+  - name: MYSQL_PASSWORD
+    secretKeyRef:
+      name: mysql-secret
+      key: password
+  - name: WEBHOOK_URL
+    value: https://webhook.site/<id>
+
+annotations:
+  reloader.stakater.com/auto: "true"
+
+configMap:
+  enabled: true
+  data:
+    config.yaml: |-
+      logger:
+        level: debug
+        encoding: json
+      
+      server_name: "$POD_IP"
+        
+      hashring:
+        sync_worker_time_ms: 300
+        dns_ring_discovery:
+          domain: "binwatch-headless.binwatch.svc.cluster.local"
+      
+      sources:
+        mysql:
+          host: "$MYSQL_HOST"
+          port: $MYSQL_PORT
+          user: "$MYSQL_USER"
+          password: "$MYSQL_PASSWORD"
+          server_id: 100
+          read_timeout: 90
+          heartbeat_period: 60
+          flavor: mysql
+          sync_timeout_ms: 200
+          filter_tables:
+            - database: test
+              table: test
+      
+      connectors:
+        routes:
+          - events: ["insert", "update"]
+            connector: webhook
+            data: |
+              {{- printf `{ "index": "test", "id": %v, "data": %s }` .data.id ( toJson .data ) }}
+          - events: ["delete"]
+            connector: webhook
+            data: |
+              {{- printf `{ "index": "test", "id": %v }` .data.id }}
+
+        webhook:
+          tls_skip_verify: false
+          url: "$WEBHOOK_URL"
+          method: "POST"
+          headers:
+            X-BinWatch: "true"
+```
 ## How to collaborate
 
 We are open to external collaborations for this project. For doing it you must fork the

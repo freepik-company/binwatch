@@ -31,6 +31,7 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
+annotations: {}
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 podAnnotations: {}
@@ -51,7 +52,6 @@ securityContext: {}
 
 headlessService:
   enabled: true
-  port: 80
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious

@@ -9,7 +9,6 @@ FROM alpine:3.18
 RUN apk --no-cache add ca-certificates bash
 WORKDIR /app
 COPY --from=builder /app/binwatch /app/
-COPY public/ /app/public/
 COPY docs/samples/config-sample.yaml /app/config.yaml
 ENTRYPOINT [ "./binwatch", "watch" ]
 CMD ["--config", "/app/config.yaml"]
