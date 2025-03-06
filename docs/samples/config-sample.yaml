@@ -2,30 +2,36 @@
 # BinWatch configuration file
 # This file is written in YAML format
 
+# ATTENTION!
+# Also you can use environment variables in the configuration file. The environment variables must be written in the
+# format $ENV_VAR_NAME. The environment variables will be replaced by its value in execution time.
+
 # Logger configuration
 logger:
   # debug, info, warn, error, dpanic, panic, fatal
-  level: debug
+  level: info
   # console or json
   encoding: json
 
-# Server name of the binwatch instance
+# Server name of the binwatch instance. It might be a environment variable and it will be replaced by its value in
+# execution time
 server_name: "$HOSTNAME"
 
-# Hashring configuration
-hashring:
+# Hashring configuration for HA and load balancing purposes
+# hashring:
 
   # Sync worker time in milliseconds to sync the ring nodes when a new node is added or removed from the ring
-  sync_worker_time_ms: 300
+  # sync_worker_time_ms: 300
 
   # For static ring discovery we need to define the server names that are part of the ring
-  static_ring_discovery:
-    hosts:
-    - test
-    - test2
+  # static_ring_discovery:
+  #  hosts:
+  #    - test
+  #    - test2
 
   # For DNS ring discovery we need to define the domain and the port of the headless service to get
   # the list of server names that are part of the ring
+  # Recommended for kubernetes deployments with headless services
   # dns_ring_discovery:
   #   domain: "dns.example.com"
 
@@ -35,10 +41,10 @@ sources:
 
   # MySQL source configuration
   mysql:
-    host: "127.0.0.1"
-    port: 3306
-    user: "root"
-    password: "MiContrasenaSegura"
+    host: "$MYSQL_HOST"
+    port: $MYSQL_PORT
+    user: "$MYSQL_USER"
+    password: "$MYSQL_PASSWORD"
 
     # Server ID must be unique across all MySQL servers
     server_id: 100
@@ -64,25 +70,25 @@ sources:
 # List of connectors to send the data to
 connectors:
 
+  # Routes configuration for the connectors. It determines the events that will be sent to each connectors and
+  # the data format that will be sent to the connector.
+  # Events can be insert, update or delete
+  # Data format is in golang template format. The data read from the binlog will be passed to the template as .data
   routes:
-    - events: ["insert", "update"]
-      connector: pubsub
-      data: |
-        {{- printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
-    - events: ["delete"]
-      connector: pubsub
+    - events: ["insert", "update", "delete"]
+      connector: webhook
       data: |
         {{- printf `{ "index": "test", "id": %v }` .data.id }}
 
-  # PubSub connector configuration
-  pubsub:
-    project_id: "test-project"
-    topic_id: "test-topic"
+  # Connectors configuration. Just pubsub and webhook supported at the moment.
 
   # Webhook connector configuration
   webhook:
     tls_skip_verify: false
-    url: "https://webhook.site/d4a60a06-3559-41c1-b26c-f701fcebfe5c"
+    url: "https://webhook.site/<id>"
     method: "POST"
     headers:
       X-BinWatch: "true"
+  # credentials:
+  #  username: "$WEBHOOK_USERNAME"
+  #  password: "$WEBHOOK_PASSWORD"

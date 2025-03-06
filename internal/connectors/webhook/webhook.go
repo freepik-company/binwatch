@@ -1,21 +1,44 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package webhook
 
 import (
-	"binwatch/api/v1alpha1"
-	"binwatch/internal/template"
+	//
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
+
+	//
+	"go.uber.org/zap"
+
+	//
+	"binwatch/api/v1alpha1"
+	"binwatch/internal/template"
 )
 
+// Send sends a message to a webhook
 func Send(app v1alpha1.Application, templateData string, jsonData []byte) {
 
 	logger := app.Logger
 
 	logger.Debug("Sending webhook", zap.String("data", string(jsonData)))
+	
 	// Create the HTTP client
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -48,6 +71,7 @@ func Send(app v1alpha1.Application, templateData string, jsonData []byte) {
 	err = json.Unmarshal(jsonData, &data)
 	if err != nil {
 		logger.Error("Error parsing JSON data for webhook integration", zap.Error(err))
+		return
 	}
 
 	// Add row data to the template injected

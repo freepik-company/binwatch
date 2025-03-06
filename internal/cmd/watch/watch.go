@@ -1,28 +1,49 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package watch
 
 import (
+	//
+	"context"
+	"log"
+	"reflect"
+	"strings"
+	"time"
+
+	//
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
+	//
 	"binwatch/api/v1alpha1"
 	"binwatch/internal/config"
 	"binwatch/internal/hashring"
 	"binwatch/internal/sources/mysql"
-	"context"
-	"go.uber.org/zap/zapcore"
-	"log"
-	"reflect"
-	"time"
-
-	"strings"
-
-	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
 
 const (
-	descriptionShort = `TODO`
+	descriptionShort = `Start watching the MySQL binlog`
 	descriptionLong  = `
-	TODO`
+	Start watching the MySQL binlog and track changes that occur in database tables.
+	`
 )
 
+// NewCommand TODO
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "watch",
@@ -38,6 +59,7 @@ func NewCommand() *cobra.Command {
 	return cmd
 }
 
+// WatchCommand TODO
 func WatchCommand(cmd *cobra.Command, args []string) {
 
 	// Check the flags for this command
@@ -84,6 +106,12 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 		ErrorOutputPaths: []string{"stderr"},
 		EncoderConfig:    zap.NewProductionEncoderConfig(),
 	}
+
+	// Set timestamp format
+	logConfig.EncoderConfig.TimeKey = "time"
+	logConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+
+	// Build the logger
 	logger, err := logConfig.Build()
 	if err != nil {
 		log.Fatalf("Error creating logger: %v", err)
@@ -99,10 +127,11 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 	// Set the configuration inside the global context
 	app.Config = &configContent
 
-	// Add server to the Hashring
+	// Try to add server to the Hashring
 	hr := hashring.NewHashRing(1000)
 	go hr.SyncWorker(&app, time.Duration(app.Config.Hashring.SyncWorkerTimeMs)*time.Millisecond)
 
+	// If hashring is present, wait for the server list to be populated, any other case continue
 	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
 		for {
 			if len(hr.GetServerList()) != 0 {
@@ -114,12 +143,14 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 
 	// Get server name and add it to logs
 	if app.Config.ServerName == "" {
-		log.Fatalf("Server name is required")
+		app.Logger.Fatal("Server name is required in configuration file `server_name`.")
 	}
 	app.Logger = app.Logger.With(zap.String("server", app.Config.ServerName))
 
 	// Run MySQL Watcher if MySQL config is present
 	if !reflect.DeepEqual(app.Config.Sources.MySQL, v1alpha1.MySQLConfig{}) {
 		mysql.Watcher(app, hr)
+	} else {
+		app.Logger.Fatal("No connector configuration found")
 	}
 }

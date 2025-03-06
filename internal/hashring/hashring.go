@@ -1,3 +1,19 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package hashring
 
 import (
@@ -9,6 +25,7 @@ import (
 	"sync"
 )
 
+// HashRing is a consistent hashing implementation
 type HashRing struct {
 	sync.RWMutex
 
@@ -17,17 +34,20 @@ type HashRing struct {
 	vnodesPerNode int
 }
 
+// Node represents a server in the hash ring
 type Node struct {
 	hash   int
 	server string
 }
 
+// NewHashRing creates a new HashRing
 func NewHashRing(vnodesPerNode int) *HashRing {
 	return &HashRing{
 		vnodesPerNode: vnodesPerNode,
 	}
 }
 
+// AddServer adds a server to the hash ring
 func (h *HashRing) AddServer(server string) {
 	h.Lock()
 	defer h.Unlock()
@@ -43,6 +63,7 @@ func (h *HashRing) AddServer(server string) {
 	})
 }
 
+// RemoveServer removes a server from the hash ring
 func (h *HashRing) RemoveServer(server string) {
 	h.Lock()
 	defer h.Unlock()
@@ -57,6 +78,7 @@ func (h *HashRing) RemoveServer(server string) {
 	h.nodes = newNodes
 }
 
+// GetServer returns the server for a given key
 func (h *HashRing) GetServer(key string) string {
 	h.RLock()
 	defer h.RUnlock()
