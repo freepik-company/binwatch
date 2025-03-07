@@ -1,4 +1,3 @@
-{{- if .Values.headlessService.enabled -}}
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,4 +9,3 @@ spec:
   clusterIP: None
   selector:
     {{- include "binwatch.selectorLabels" . | nindent 4 }}
-  {{- end }}
