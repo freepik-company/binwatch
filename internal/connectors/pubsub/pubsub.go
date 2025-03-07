@@ -30,7 +30,7 @@ import (
 )
 
 // Send sends a message to a PubSub topic
-func Send(app v1alpha1.Application, templateData string, jsonData []byte) {
+func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 
 	logger := app.Logger
 

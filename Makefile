@@ -88,8 +88,8 @@ run-example:
 		USE test; \
 		CREATE TABLE IF NOT EXISTS test (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100));"
 
-	@(HOSTNAME=test go run cmd/main.go watch --config docs/samples/mysql-binlog-watch-row/config.yaml & echo $$! > /tmp/go_pid.tmp)
-	@(HOSTNAME=test2 go run cmd/main.go watch --config docs/samples/mysql-binlog-watch-row/config.yaml & echo $$! > /tmp/go_pid.tmp)
+	@(HOSTNAME=127.0.0.1 PORT=8080 go run cmd/main.go watch --config docs/samples/mysql-binlog-watch-row/config.yaml & echo $$! > /tmp/go_pid.tmp)
+	@(HOSTNAME=localhost PORT=8081 go run cmd/main.go watch --config docs/samples/mysql-binlog-watch-row/config.yaml & echo $$! > /tmp/go_pid.tmp)
 
 	@sleep 6
 	@for i in $$(seq 1 20); do \

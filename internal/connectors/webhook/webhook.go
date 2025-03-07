@@ -33,12 +33,12 @@ import (
 )
 
 // Send sends a message to a webhook
-func Send(app v1alpha1.Application, templateData string, jsonData []byte) {
+func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 
 	logger := app.Logger
 
 	logger.Debug("Sending webhook", zap.String("data", string(jsonData)))
-	
+
 	// Create the HTTP client
 	httpClient := &http.Client{
 		Transport: &http.Transport{

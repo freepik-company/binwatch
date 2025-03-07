@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"binwatch/internal/hashring"
 	//
 	"database/sql"
 	"fmt"
@@ -43,26 +44,28 @@ func getColumnNames(schema, table string) ([]string, error) {
 }
 
 // getMasterStatus function to get the master status of the MySQL server and get the actual binlog position
-func getMasterStatus(host string, port uint16, user, password string) (err error) {
+func getMasterStatus(app *v1alpha1.Application) (binLogPos uint32, binLogFile string, err error) {
 
+	app.Logger.Debug("Getting last binlog position from MySQL server")
 	// Open the connection to the MySQL server. It is closed at the end of the Handler function
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/", user, password, host, port)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/", app.Config.Sources.MySQL.User, app.Config.Sources.MySQL.Password,
+		app.Config.Sources.MySQL.Host, app.Config.Sources.MySQL.Port)
 	db, err = sql.Open("mysql", dsn)
 	if err != nil {
-		return err
+		return binLogPos, binLogFile, err
 	}
 
 	// Query to get the master status
 	err = db.QueryRow("SHOW MASTER STATUS").Scan(&binLogFile, &binLogPos, new(interface{}), new(interface{}), new(interface{}))
 	if err != nil {
-		return err
+		return binLogPos, binLogFile, err
 	}
 
-	return err
+	return binLogPos, binLogFile, err
 }
 
 // filterEvent function to filter the events based on the configuration
-func filterEvent(app v1alpha1.Application, ev *replication.BinlogEvent) (bool, error) {
+func filterEvent(app *v1alpha1.Application, ev *replication.BinlogEvent) (bool, error) {
 
 	// Get the event schema and table
 	schema := ""
@@ -91,7 +94,7 @@ func filterEvent(app v1alpha1.Application, ev *replication.BinlogEvent) (bool, e
 }
 
 // executeConnectors function to execute the connectors based on the configuration
-func executeConnectors(app v1alpha1.Application, eventStr string, jsonData []byte) {
+func executeConnectors(app *v1alpha1.Application, eventStr string, jsonData []byte) {
 
 	event := strings.ToLower(eventStr)
 
@@ -108,4 +111,62 @@ func executeConnectors(app v1alpha1.Application, eventStr string, jsonData []byt
 		}
 	}
 
+}
+
+func getMinimalBinlogPosition(app *v1alpha1.Application, ring *hashring.HashRing) (uint32, string, error) {
+	// Get current servers in the hashring
+	servers := ring.GetServerList()
+	var minPosition uint32
+	var minFile string
+	initialized := false
+	serverInitialized := ""
+	for _, server := range servers {
+
+		// Skip the current server
+		if server == app.Config.ServerName {
+			continue
+		}
+
+		//
+		p, f, err := ring.GetServerBinlogPositionBackup(server)
+		if err != nil {
+			app.Logger.Error(fmt.Sprintf("Error getting binlog position for server %s", server), zap.Error(err))
+			continue
+		}
+
+		// Initialize with the first valid position
+		if !initialized {
+			minPosition = p
+			minFile = f
+			serverInitialized = server
+			initialized = true
+			continue
+		}
+
+		// Compare files first if they're different
+		if f != minFile {
+			// You may need a more sophisticated comparison if files have a numeric sequence
+			// For example: binlog.000001, binlog.000002, etc.
+			if f < minFile {
+				minPosition = p
+				minFile = f
+				serverInitialized = server
+			}
+		} else if p < minPosition {
+			// If same file, compare positions
+			minPosition = p
+			minFile = f
+			serverInitialized = server
+		}
+	}
+
+	if initialized {
+		app.Logger.Info(fmt.Sprintf("Most behind binlog position found in file %s at position %d from server %s", minFile, minPosition, serverInitialized),
+			zap.String("file", minFile),
+			zap.Uint32("position", minPosition))
+		return minPosition, minFile, nil
+	}
+
+	app.Logger.Warn("Could not determine binlog position from any server")
+	return minPosition, minFile, nil
 }

@@ -23,7 +23,11 @@ import (
 
 // Application TODO
 type Application struct {
-	Config  *ConfigSpec
-	Logger  *zap.Logger
-	Context context.Context
+	Config           *ConfigSpec
+	Logger           *zap.Logger
+	Context          context.Context
+	BinLogPosition   uint32
+	BinLogFile       string
+	RollBackPosition uint32
+	RollBackFile     string
 }

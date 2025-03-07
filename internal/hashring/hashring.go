@@ -17,8 +17,12 @@ limitations under the License.
 package hashring
 
 import (
+	"binwatch/api/v1alpha1"
+	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
 	"hash/crc32"
+	"net/http"
 	"slices"
 	"sort"
 	"strconv"
@@ -30,14 +34,26 @@ type HashRing struct {
 	sync.RWMutex
 
 	//
-	nodes         []Node
-	vnodesPerNode int
+	nodes           []Node
+	vnodesPerNode   int
+	binlogPositions []BinlogPositions
 }
 
 // Node represents a server in the hash ring
 type Node struct {
 	hash   int
 	server string
+}
+
+type BinlogPositions struct {
+	Server         string
+	BinlogPosition uint32
+	BinlogFile     string
+}
+
+type BinlogResponse struct {
+	File     string `json:"file"`
+	Position uint32 `json:"position"`
 }
 
 // NewHashRing creates a new HashRing
@@ -48,7 +64,7 @@ func NewHashRing(vnodesPerNode int) *HashRing {
 }
 
 // AddServer adds a server to the hash ring
-func (h *HashRing) AddServer(server string) {
+func (h *HashRing) AddServer(app *v1alpha1.Application, server string) {
 	h.Lock()
 	defer h.Unlock()
 
@@ -58,6 +74,26 @@ func (h *HashRing) AddServer(server string) {
 		hash := int(crc32.ChecksumIEEE([]byte(vnode)))
 		h.nodes = append(h.nodes, Node{hash: hash, server: server})
 	}
+
+	// Add the binlog position for the server to the hashring.
+	// If the server is the same as the current server, use the current binlog position
+	if server == app.Config.ServerName {
+		h.binlogPositions = append(h.binlogPositions, BinlogPositions{Server: server, BinlogPosition: app.BinLogPosition, BinlogFile: app.BinLogFile})
+	}
+
+	// If the server is different, get the binlog position from the server
+	if server != app.Config.ServerName {
+		binlogPosition, binLogFile, err := h.GetServerBinlogPosition(server)
+		if err != nil {
+			app.Logger.Error("Error getting binlog position for server", zap.String("server", server), zap.Error(err))
+			// If there is an error getting the binlog position, use the current binlog position for this server
+			binlogPosition = app.BinLogPosition
+		}
+		// Add the binlog position to the hashring
+		h.binlogPositions = append(h.binlogPositions, BinlogPositions{Server: server, BinlogPosition: binlogPosition, BinlogFile: binLogFile})
+	}
+
+	//
 	sort.Slice(h.nodes, func(i, j int) bool {
 		return h.nodes[i].hash < h.nodes[j].hash
 	})
@@ -76,6 +112,15 @@ func (h *HashRing) RemoveServer(server string) {
 		}
 	}
 	h.nodes = newNodes
+
+	// Remove the binlog position for the server who lefts the hashring
+	var newBinLogPositions []BinlogPositions
+	for _, node := range h.binlogPositions {
+		if node.Server != server {
+			newBinLogPositions = append(newBinLogPositions, node)
+		}
+	}
+	h.binlogPositions = newBinLogPositions
 }
 
 // GetServer returns the server for a given key
@@ -128,6 +173,78 @@ func (h *HashRing) GetServerList() (servers []string) {
 	return servers
 }
 
+// SyncBinLogPositions syncs the binlog positions for all the nodes in the hashring
+func (h *HashRing) SyncBinLogPositions(app *v1alpha1.Application) {
+	h.Lock()
+	defer h.Unlock()
+
+	// Iterate over the binlog positions and update the binlog position for the server
+	for i, node := range h.binlogPositions {
+
+		// If the server is the same as the current server, use the current binlog position
+		if node.Server == app.Config.ServerName {
+			app.Logger.Debug("syncing binlog positions for this server", zap.String("file", app.BinLogFile), zap.Uint32("position", app.BinLogPosition))
+			h.binlogPositions[i].BinlogPosition = app.BinLogPosition
+			h.binlogPositions[i].BinlogFile = app.BinLogFile
+			continue
+		}
+
+		// If the server is different, get the binlog position from the server
+		binlogPosition, binLogFile, err := h.GetServerBinlogPosition(node.Server)
+		if err != nil {
+			app.Logger.Error("Error getting binlog position for server", zap.String("server", node.Server), zap.Error(err))
+			// If there is an error getting the binlog position, use the current binlog position for this server
+			binlogPosition = app.BinLogPosition
+		}
+		app.Logger.Debug(fmt.Sprintf("syncing binlog positions for %s server", node.Server), zap.String("file", binLogFile), zap.Uint32("position", binlogPosition))
+		h.binlogPositions[i].BinlogPosition = binlogPosition
+		h.binlogPositions[i].BinlogFile = binLogFile
+	}
+}
+
+// GetServerBinlogPosition returns the binlog position for a given server
+func (h *HashRing) GetServerBinlogPosition(server string) (position uint32, file string, err error) {
+
+	// Create the HTTP client
+	c := &http.Client{}
+
+	// Create the HTTP request to http://server:port/position path which returns the binlog position as JSON
+	// { "file": "mysql-bin.000001", "position": 1234 }
+	r, err := http.NewRequest("GET", fmt.Sprintf("http://%s/position", server), nil)
+	if err != nil {
+		return position, file, fmt.Errorf("Error creating HTTP Request for webhook integration: %v", err)
+	}
+
+	rsp, err := c.Do(r)
+	if err != nil {
+		return position, file, fmt.Errorf("Error sending HTTP request for webhook integration: %v", err)
+	}
+
+	defer rsp.Body.Close()
+
+	// Decode the JSON response
+	var binlogData BinlogResponse
+	err = json.NewDecoder(rsp.Body).Decode(&binlogData)
+	if err != nil {
+		return 0, "", fmt.Errorf("Error decoding JSON: %v", err)
+	}
+
+	return binlogData.Position, binlogData.File, nil
+}
+
+func (h *HashRing) GetServerBinlogPositionBackup(server string) (position uint32, file string, err error) {
+
+	servers := h.binlogPositions
+	for _, s := range servers {
+		if s.Server == server {
+			return s.BinlogPosition, s.BinlogFile, nil
+		}
+	}
+
+	return position, file, fmt.Errorf("Server %s not found in binlog positions", server)
+}
+
+// String returns a string representation of the hashring
 func (h *HashRing) String() string {
 	servers := h.GetServerList()
 	str := "{"

@@ -119,13 +119,23 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 
 	// Configure application's context
 	app := v1alpha1.Application{
-		Config:  &v1alpha1.ConfigSpec{},
-		Logger:  logger,
-		Context: context.Background(),
+		Config:           &v1alpha1.ConfigSpec{},
+		Logger:           logger,
+		Context:          context.Background(),
+		BinLogPosition:   0,
+		BinLogFile:       "",
+		RollBackPosition: 0,
+		RollBackFile:     "",
 	}
 
 	// Set the configuration inside the global context
 	app.Config = &configContent
+
+	// Get server name and add it to logs
+	if app.Config.ServerName == "" {
+		app.Logger.Fatal("Server name is required in configuration file `server_name`.")
+	}
+	app.Logger = app.Logger.With(zap.String("server", app.Config.ServerName))
 
 	// Try to add server to the Hashring
 	hr := hashring.NewHashRing(1000)
@@ -137,19 +147,15 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 			if len(hr.GetServerList()) != 0 {
 				break
 			}
+			app.Logger.Info("Waiting for hashring servers to be ready...")
 			time.Sleep(1 * time.Second)
 		}
 	}
 
-	// Get server name and add it to logs
-	if app.Config.ServerName == "" {
-		app.Logger.Fatal("Server name is required in configuration file `server_name`.")
-	}
-	app.Logger = app.Logger.With(zap.String("server", app.Config.ServerName))
-
 	// Run MySQL Watcher if MySQL config is present
 	if !reflect.DeepEqual(app.Config.Sources.MySQL, v1alpha1.MySQLConfig{}) {
-		mysql.Watcher(app, hr)
+		app.Logger.Info("Starting MySQL watcher")
+		mysql.Watcher(&app, hr)
 	} else {
 		app.Logger.Fatal("No connector configuration found")
 	}

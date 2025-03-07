@@ -53,6 +53,12 @@ securityContext: {}
 headlessService:
   enabled: true
 
+service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+    annotations: {}
+
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
@@ -66,7 +72,24 @@ resources: {}
   #   memory: 128Mi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe: {}
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 1
+  successThreshold: 1
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  periodSeconds: 1
+  timeoutSeconds: 1
+  successThreshold: 1
+  failureThreshold: 3
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -116,3 +139,11 @@ configMap:
   # ConfigMap data
   data: {}
   # key: value
+
+podDisruptionBudget:
+  enabled: true
+  # Only one of minAvailable or maxUnavailable should be specified
+  minAvailable: 1      # Can be an absolute number or a percentage like "50%"
+  # maxUnavailable: 1  # Can be an absolute number or a percentage like "25%"
+  annotations: {}
+  # custom.annotation: value

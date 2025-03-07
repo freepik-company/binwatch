@@ -42,60 +42,84 @@ var (
 	tableMetadata   = make(map[string][]string)
 	alterTableRegex = regexp.MustCompile(`(?i)ALTER\s+TABLE\s+(\S+)`)
 	db              *sql.DB
-	binLogFile      *string
-	binLogPos       *uint32
+	err             error
+	binLogPos       uint32
+	binLogFile      string
 )
 
 // Watcher function to watch the MySQL binlog
-func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
-
-	// Get configuration from the context
-	host := app.Config.Sources.MySQL.Host
-	port := app.Config.Sources.MySQL.Port
-	user := app.Config.Sources.MySQL.User
-	password := app.Config.Sources.MySQL.Password
-	serverID := app.Config.Sources.MySQL.ServerID
-	flavor := app.Config.Sources.MySQL.Flavor
-	readTimeout := app.Config.Sources.MySQL.ReadTimeout
-	heartbeatPeriod := app.Config.Sources.MySQL.HeartbeatPeriod
-
-	logger := app.Logger
-
-	syncTimeoutMs := app.Config.Sources.MySQL.SyncTimeoutMs
-
-	// Get the current binlog position
-	err := getMasterStatus(host, port, user, password)
-	if err != nil {
-		logger.Error("Error getting actual position of binlog", zap.Error(err))
-	}
-	defer db.Close()
-	logger.Info("Starting binlog capture", zap.String("binlog_file", *binLogFile), zap.Uint32("binlog_pos", *binLogPos))
+func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 
 	// configure the MySQL connection
 	cfg := replication.BinlogSyncerConfig{
-		ServerID:        serverID,
-		Flavor:          flavor,
-		Host:            host,
-		Port:            port,
-		User:            user,
-		Password:        password,
-		ReadTimeout:     time.Duration(readTimeout) * time.Second,
-		HeartbeatPeriod: time.Duration(heartbeatPeriod) * time.Second,
+		ServerID:        app.Config.Sources.MySQL.ServerID,
+		Flavor:          app.Config.Sources.MySQL.Flavor,
+		Host:            app.Config.Sources.MySQL.Host,
+		Port:            app.Config.Sources.MySQL.Port,
+		User:            app.Config.Sources.MySQL.User,
+		Password:        app.Config.Sources.MySQL.Password,
+		ReadTimeout:     time.Duration(app.Config.Sources.MySQL.ReadTimeout) * time.Second,
+		HeartbeatPeriod: time.Duration(app.Config.Sources.MySQL.HeartbeatPeriod) * time.Second,
 	}
+
+	// If hashring is configured, check if there are servers running with the position of the binlog
+	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
+		// Get minimal binlog position from all servers
+		binLogPos, binLogFile, err = getMinimalBinlogPosition(app, ring)
+	}
+
+	// If no position is found, let's read binlog from the latest position reading it from database directly
+	if binLogPos == 0 && binLogFile == "" {
+		binLogPos, binLogFile, err = getMasterStatus(app)
+		if err != nil {
+			app.Logger.Error("Error getting actual position of binlog", zap.Error(err))
+		}
+		db.Close()
+	}
+
+	app.Logger.Info("Starting binlog capture", zap.String("binlog_file", binLogFile), zap.Uint32("binlog_pos", binLogPos))
 
 	// Start the binlog syncer from the actual position
 	syncer := replication.NewBinlogSyncer(cfg)
-	pos := mysql.Position{Name: *binLogFile, Pos: *binLogPos}
+	pos := mysql.Position{Name: binLogFile, Pos: binLogPos}
 	streamer, err := syncer.StartSync(pos)
 	if err != nil {
-		logger.Error("Error starting sync for binlogs", zap.Error(err))
+		app.Logger.Fatal("Error starting sync for binlogs", zap.Error(err))
+		return
 	}
 
 	// Process the events
 	for {
 
+		// Set binlog position if rollback is needed when a node lefts the hashring
+		if app.RollBackPosition != 0 && app.RollBackFile != "" {
+
+			app.Logger.Info("Rolling back to last knowledge position and file", zap.Uint32("position", app.RollBackPosition), zap.String("file", app.RollBackFile))
+
+			// New position is the rollback position
+			pos.Pos = app.RollBackPosition
+			pos.Name = app.RollBackFile
+
+			// Close the current syncer and start a new one
+			syncer.Close()
+			syncer = replication.NewBinlogSyncer(cfg)
+			streamer, err = syncer.StartSync(pos)
+			if err != nil {
+				app.Logger.Fatal("Error starting sync for binlogs again, bye.", zap.Error(err))
+				return
+			}
+
+			// Clean up the rollback position after using it
+			app.RollBackPosition = 0
+			app.RollBackFile = ""
+		}
+
+		// Update the binlog current position in the application
+		app.BinLogPosition = syncer.GetNextPosition().Pos
+		app.BinLogFile = syncer.GetNextPosition().Name
+
 		// Set timeout for processing events
-		sqlapp, cancel := context.WithTimeout(context.Background(), time.Duration(syncTimeoutMs)*time.Millisecond)
+		sqlapp, cancel := context.WithTimeout(context.Background(), time.Duration(app.Config.Sources.MySQL.SyncTimeoutMs)*time.Millisecond)
 
 		// Get the next event
 		ev, err := streamer.GetEvent(sqlapp)
@@ -110,7 +134,7 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 			}
 
 			// Handle other errors
-			logger.Info("Error getting the event", zap.Error(err))
+			app.Logger.Info("Error getting the event", zap.Error(err))
 			continue
 		}
 
@@ -119,7 +143,7 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 		if len(app.Config.Sources.MySQL.FilterTables) > 0 {
 			ok, err := filterEvent(app, ev)
 			if err != nil {
-				logger.Info("Error filtering event", zap.Error(err))
+				app.Logger.Info("Error filtering event", zap.Error(err))
 			}
 			if !ok {
 				continue
@@ -145,7 +169,7 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 			// Get the query and print it
 			query := string(e.Query)
 
-			logger.Info("Executed query for Schema", zap.String("schema", string(e.Schema)), zap.String("query", query))
+			app.Logger.Info("Executed query for Schema", zap.String("schema", string(e.Schema)), zap.String("query", query), zap.Uint32("position", app.BinLogPosition), zap.String("file", app.BinLogFile))
 
 			// If the query is an ALTER TABLE, clean up the memory used for the table metadata, so when an insert
 			// is executed, the tableID is increased by one.
@@ -157,15 +181,15 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 
 				// Get the column names
 				// Print the message to get to know the user that the columns are being retrieved from MySQL so it's a query
-				logger.Info("Getting columns for table", zap.String("table", tableName))
+				app.Logger.Info("Getting columns for table", zap.String("table", tableName))
 				columnNames, err := getColumnNames(string(e.Schema), tableName)
 				if err != nil {
-					logger.Info("Error getting columns after ALTER TABLE", zap.Error(err))
+					app.Logger.Info("Error getting columns after ALTER TABLE", zap.Error(err))
 				}
 
 				// Replace table columns in memory
 				tableMetadata[tableName] = columnNames
-				logger.Info("Updated metadata for table", zap.String("table", tableName), zap.Strings("columns", columnNames))
+				app.Logger.Info("Updated metadata for table", zap.String("table", tableName), zap.Strings("columns", columnNames))
 
 			}
 
@@ -178,7 +202,7 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 			schemaName := string(e.Schema)
 			tableName := string(e.Table)
 
-			logger.Info("TableMapEvent detected", zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID))
+			app.Logger.Info("TableMapEvent detected", zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID), zap.Uint32("position", app.BinLogPosition), zap.String("file", app.BinLogFile))
 
 			// Check if table metadata is already stored in memory
 			_, exists := tableMetadata[tableName]
@@ -187,11 +211,11 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 				// If not exists, get the column names and store them in memory
 				columnNames, err := getColumnNames(schemaName, tableName)
 				if err != nil {
-					logger.Info("Error getting columns for table", zap.String("table", tableName), zap.Error(err))
+					app.Logger.Info("Error getting columns for table", zap.String("table", tableName), zap.Error(err))
 				}
 
 				tableMetadata[tableName] = columnNames
-				logger.Info("Found columns for table", zap.String("table", tableName), zap.Strings("columns", columnNames))
+				app.Logger.Info("Found columns for table", zap.String("table", tableName), zap.Strings("columns", columnNames))
 
 			}
 
@@ -207,7 +231,7 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 			// RowsEvent there is a TableMapEvent)
 			columnNames, ok := tableMetadata[tableName]
 			if !ok {
-				logger.Info("Not found table metadata in memory", zap.String("table", tableName))
+				app.Logger.Info("Not found table metadata in memory", zap.String("table", tableName))
 				continue
 			}
 
@@ -223,7 +247,7 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 				eventStr = "DELETE"
 			}
 
-			logger.Info("Found event", zap.String("event", eventStr), zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID))
+			app.Logger.Info("Found event", zap.String("event", eventStr), zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID), zap.Uint32("position", app.BinLogPosition), zap.String("file", app.BinLogFile))
 
 			// For UPDATE, the event receives the values in pairs (OLD, NEW), so we only take the NEW values
 			// For INSERT and DELETE, the event receives the values directly
@@ -253,12 +277,12 @@ func Watcher(app v1alpha1.Application, ring *hashring.HashRing) {
 				// Convert the row to JSON
 				jsonData, err := json.Marshal(rowMap)
 				if err != nil {
-					logger.Info("Error marshaling json data", zap.Error(err))
+					app.Logger.Info("Error marshaling json data", zap.Error(err))
 					continue
 				}
 
 				// Print the JSON data
-				logger.Debug("JSON data", zap.String("data", string(jsonData)))
+				app.Logger.Debug("JSON data", zap.String("data", string(jsonData)))
 
 				// Send the JSON data to connectors
 				executeConnectors(app, eventStr, jsonData)

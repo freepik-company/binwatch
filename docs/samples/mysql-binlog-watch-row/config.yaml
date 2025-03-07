@@ -10,33 +10,28 @@ logger:
   encoding: json
 
 # Server name of the binwatch instance
-server_name: "$HOSTNAME"
+server_name: "$HOSTNAME:$PORT"
 
 # Hashring configuration
 hashring:
 
   # Sync worker time in milliseconds to sync the ring nodes when a new node is added or removed from the ring
-  sync_worker_time_ms: 300
+  sync_worker_time_ms: 5000
 
-  # Health check configuration for the hashring
-  health_check:
-    # Health check type. Supported types are http and icmp
-    type: icmp
-    # Just needed for http health check. The path to check the health of the server
-    # path: "/health"
-    # Timeout in seconds for the health check
-    timeout: 1
+  # API port to expose the hashring
+  api_port: $PORT
 
   # For static ring discovery we need to define the server names that are part of the ring
   static_ring_discovery:
     hosts:
-    - test
-    - test2
+    - 127.0.0.1:8080
+    - localhost:8081
 
   # For DNS ring discovery we need to define the domain and the port of the headless service to get
   # the list of server names that are part of the ring
   # dns_ring_discovery:
   #   domain: "dns.example.com"
+  #   port: 8080
 
 # Sources configuration
 # List of sources to watch for changes in the database binlog
