@@ -1,9 +1,9 @@
 replicaCount: 2
 
 image:
-  repository: ghcr.io/freepik-company/binwatch
+  repository: docker.io/dfradehubs/custom-tests
   pullPolicy: IfNotPresent
-  tag: "latest"
+  tag: "202503071416"
 
 serviceAccount:
   annotations: {}
@@ -46,7 +46,7 @@ env:
   - name: MYSQL_PASSWORD
     value: "MiContrasenaSegura"
   - name: WEBHOOK_URL
-    value: https://webhook.site/<id>
+    value: https://webhook.site/606b2d8a-1eb0-42af-ab2d-127a48d7cda6
 
 annotations:
   reloader.stakater.com/auto: "true"
@@ -59,15 +59,14 @@ configMap:
         level: debug
         encoding: json
       
-      server_name: "$POD_IP"
+      server_name: "$POD_IP:8080"
         
       hashring:
-        sync_worker_time_ms: 300
-        health_check:
-          type: icmp
-          timeout: 1
+        sync_worker_time_ms: 3000
+        api_port: 8080
         dns_ring_discovery:
-          domain: "binwatch-headless.binwatch.svc.cluster.local"
+          domain: "binwatch-headless.dfradejas-pgaona-binwatch.svc.cluster.local"
+          port: 8080
       
       sources:
         mysql:
