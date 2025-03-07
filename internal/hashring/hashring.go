@@ -17,16 +17,21 @@ limitations under the License.
 package hashring
 
 import (
-	"binwatch/api/v1alpha1"
+	//
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
 	"hash/crc32"
 	"net/http"
 	"slices"
 	"sort"
 	"strconv"
 	"sync"
+
+	//
+	"go.uber.org/zap"
+
+	//
+	"binwatch/api/v1alpha1"
 )
 
 // HashRing is a consistent hashing implementation
@@ -45,12 +50,14 @@ type Node struct {
 	server string
 }
 
+// BinlogPositions represents the binlog position for the server
 type BinlogPositions struct {
 	Server         string
 	BinlogPosition uint32
 	BinlogFile     string
 }
 
+// BinlogResponse represents the response for the binlog position from the API
 type BinlogResponse struct {
 	File     string `json:"file"`
 	Position uint32 `json:"position"`
@@ -78,19 +85,21 @@ func (h *HashRing) AddServer(app *v1alpha1.Application, server string) {
 	// Add the binlog position for the server to the hashring.
 	// If the server is the same as the current server, use the current binlog position
 	if server == app.Config.ServerName {
-		h.binlogPositions = append(h.binlogPositions, BinlogPositions{Server: server, BinlogPosition: app.BinLogPosition, BinlogFile: app.BinLogFile})
+		h.binlogPositions = append(h.binlogPositions, BinlogPositions{Server: server,
+			BinlogPosition: app.BinLogPosition, BinlogFile: app.BinLogFile})
 	}
 
-	// If the server is different, get the binlog position from the server
+	// If the server is different, get the binlog position from the server via HTTP request
 	if server != app.Config.ServerName {
 		binlogPosition, binLogFile, err := h.GetServerBinlogPosition(server)
 		if err != nil {
-			app.Logger.Error("Error getting binlog position for server", zap.String("server", server), zap.Error(err))
+			app.Logger.Error(fmt.Sprintf("Error getting binlog position for server %s", server), zap.Error(err))
 			// If there is an error getting the binlog position, use the current binlog position for this server
 			binlogPosition = app.BinLogPosition
 		}
 		// Add the binlog position to the hashring
-		h.binlogPositions = append(h.binlogPositions, BinlogPositions{Server: server, BinlogPosition: binlogPosition, BinlogFile: binLogFile})
+		h.binlogPositions = append(h.binlogPositions, BinlogPositions{Server: server,
+			BinlogPosition: binlogPosition, BinlogFile: binLogFile})
 	}
 
 	//
@@ -183,41 +192,45 @@ func (h *HashRing) SyncBinLogPositions(app *v1alpha1.Application) {
 
 		// If the server is the same as the current server, use the current binlog position
 		if node.Server == app.Config.ServerName {
-			app.Logger.Debug("syncing binlog positions for this server", zap.String("file", app.BinLogFile), zap.Uint32("position", app.BinLogPosition))
+			app.Logger.Debug("syncing binlog positions for this server", zap.String("file", app.BinLogFile),
+				zap.Uint32("position", app.BinLogPosition))
 			h.binlogPositions[i].BinlogPosition = app.BinLogPosition
 			h.binlogPositions[i].BinlogFile = app.BinLogFile
 			continue
 		}
 
-		// If the server is different, get the binlog position from the server
+		// If the server is different, get the binlog position from the server via HTTP
 		binlogPosition, binLogFile, err := h.GetServerBinlogPosition(node.Server)
 		if err != nil {
-			app.Logger.Error("Error getting binlog position for server", zap.String("server", node.Server), zap.Error(err))
+			app.Logger.Error(fmt.Sprintf("Error getting binlog position for server %s, using this server positions",
+				node.Server), zap.Error(err))
 			// If there is an error getting the binlog position, use the current binlog position for this server
 			binlogPosition = app.BinLogPosition
+			binLogFile = app.BinLogFile
 		}
-		app.Logger.Debug(fmt.Sprintf("syncing binlog positions for %s server", node.Server), zap.String("file", binLogFile), zap.Uint32("position", binlogPosition))
+		app.Logger.Debug(fmt.Sprintf("syncing binlog positions for %s server", node.Server),
+			zap.String("file", binLogFile), zap.Uint32("position", binlogPosition))
 		h.binlogPositions[i].BinlogPosition = binlogPosition
 		h.binlogPositions[i].BinlogFile = binLogFile
 	}
 }
 
-// GetServerBinlogPosition returns the binlog position for a given server
+// GetServerBinlogPosition returns the binlog position for a given server via HTTP request
 func (h *HashRing) GetServerBinlogPosition(server string) (position uint32, file string, err error) {
 
 	// Create the HTTP client
 	c := &http.Client{}
 
-	// Create the HTTP request to http://server:port/position path which returns the binlog position as JSON
+	// Create the HTTP request to http://server/position path which returns the binlog position as JSON
 	// { "file": "mysql-bin.000001", "position": 1234 }
 	r, err := http.NewRequest("GET", fmt.Sprintf("http://%s/position", server), nil)
 	if err != nil {
-		return position, file, fmt.Errorf("Error creating HTTP Request for webhook integration: %v", err)
+		return position, file, fmt.Errorf("error creating HTTP Request for webhook integration: %v", err)
 	}
 
 	rsp, err := c.Do(r)
 	if err != nil {
-		return position, file, fmt.Errorf("Error sending HTTP request for webhook integration: %v", err)
+		return position, file, fmt.Errorf("error sending HTTP request for webhook integration: %v", err)
 	}
 
 	defer rsp.Body.Close()
@@ -226,13 +239,14 @@ func (h *HashRing) GetServerBinlogPosition(server string) (position uint32, file
 	var binlogData BinlogResponse
 	err = json.NewDecoder(rsp.Body).Decode(&binlogData)
 	if err != nil {
-		return 0, "", fmt.Errorf("Error decoding JSON: %v", err)
+		return 0, "", fmt.Errorf("error decoding JSON: %v", err)
 	}
 
 	return binlogData.Position, binlogData.File, nil
 }
 
-func (h *HashRing) GetServerBinlogPositionBackup(server string) (position uint32, file string, err error) {
+// GetServerBinlogPositionMem returns the binlog position for a given server from memory store
+func (h *HashRing) GetServerBinlogPositionMem(server string) (position uint32, file string, err error) {
 
 	servers := h.binlogPositions
 	for _, s := range servers {
@@ -241,7 +255,7 @@ func (h *HashRing) GetServerBinlogPositionBackup(server string) (position uint32
 		}
 	}
 
-	return position, file, fmt.Errorf("Server %s not found in binlog positions", server)
+	return position, file, fmt.Errorf("server %s not found in binlog positions", server)
 }
 
 // String returns a string representation of the hashring

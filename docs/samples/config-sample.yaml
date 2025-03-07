@@ -13,9 +13,9 @@ logger:
   # console or json
   encoding: json
 
-# Server name of the binwatch instance. It might be a environment variable and it will be replaced by its value in
-# execution time
-server_name: "$HOSTNAME"
+# Server name of the binwatch instance. Can be set via environment variable which will be replaced at runtime
+# It must have the format <hostname>:<port> or <ip>:<port> to be used in the hashring
+server_name: "$HOSTNAME:$PORT"
 
 # Hashring configuration for HA and load balancing purposes
 # hashring:
@@ -23,26 +23,21 @@ server_name: "$HOSTNAME"
   # Sync worker time in milliseconds to sync the ring nodes when a new node is added or removed from the ring
   # sync_worker_time_ms: 300
 
-  # Health check configuration for the hashring
-  # health_check:
-    # Health check type. Supported types are http and icmp
-    #type: icmp
-    # Just needed for http health check. The path to check the health of the server
-    # path: "/health"
-    # Timeout in seconds for the health check
-    # timeout: 1
+  # API port to expose the hashring
+  # api_port: $PORT
 
   # For static ring discovery we need to define the server names that are part of the ring
   # static_ring_discovery:
   #  hosts:
-  #    - test
-  #    - test2
+  #    - test:8080
+  #    - test2:8081
 
   # For DNS ring discovery we need to define the domain and the port of the headless service to get
   # the list of server names that are part of the ring
   # Recommended for kubernetes deployments with headless services
   # dns_ring_discovery:
   #   domain: "dns.example.com"
+  #   port: 8080
 
 # Sources configuration
 # List of sources to watch for changes in the database binlog

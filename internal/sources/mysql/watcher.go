@@ -77,7 +77,8 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 		db.Close()
 	}
 
-	app.Logger.Info("Starting binlog capture", zap.String("binlog_file", binLogFile), zap.Uint32("binlog_pos", binLogPos))
+	app.Logger.Info("Starting binlog capture", zap.String("binlog_file", binLogFile),
+		zap.Uint32("binlog_pos", binLogPos))
 
 	// Start the binlog syncer from the actual position
 	syncer := replication.NewBinlogSyncer(cfg)
@@ -94,7 +95,8 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 		// Set binlog position if rollback is needed when a node lefts the hashring
 		if app.RollBackPosition != 0 && app.RollBackFile != "" {
 
-			app.Logger.Info("Rolling back to last knowledge position and file", zap.Uint32("position", app.RollBackPosition), zap.String("file", app.RollBackFile))
+			app.Logger.Info("Rolling back to last knowledge position and file",
+				zap.Uint32("position", app.RollBackPosition), zap.String("file", app.RollBackFile))
 
 			// New position is the rollback position
 			pos.Pos = app.RollBackPosition
@@ -119,7 +121,8 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 		app.BinLogFile = syncer.GetNextPosition().Name
 
 		// Set timeout for processing events
-		sqlapp, cancel := context.WithTimeout(context.Background(), time.Duration(app.Config.Sources.MySQL.SyncTimeoutMs)*time.Millisecond)
+		sqlapp, cancel := context.WithTimeout(context.Background(),
+			time.Duration(app.Config.Sources.MySQL.SyncTimeoutMs)*time.Millisecond)
 
 		// Get the next event
 		ev, err := streamer.GetEvent(sqlapp)
@@ -154,8 +157,8 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 		if !reflect.ValueOf(app.Config.Hashring).IsZero() {
 			t := time.Now()
 			severAssigned := ring.GetServer(t.Format("20060102150405"))
+			app.Logger.Debug(fmt.Sprintf("Server assigned: %s", severAssigned))
 			if app.Config.ServerName != severAssigned {
-				app.Logger.Debug("Server not assigned", zap.String("server_assigned", severAssigned))
 				continue
 			}
 		}
@@ -169,7 +172,9 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 			// Get the query and print it
 			query := string(e.Query)
 
-			app.Logger.Info("Executed query for Schema", zap.String("schema", string(e.Schema)), zap.String("query", query), zap.Uint32("position", app.BinLogPosition), zap.String("file", app.BinLogFile))
+			app.Logger.Info("Executed query for Schema", zap.String("schema", string(e.Schema)),
+				zap.String("query", query), zap.Uint32("position", app.BinLogPosition),
+				zap.String("file", app.BinLogFile))
 
 			// If the query is an ALTER TABLE, clean up the memory used for the table metadata, so when an insert
 			// is executed, the tableID is increased by one.
@@ -189,7 +194,8 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 
 				// Replace table columns in memory
 				tableMetadata[tableName] = columnNames
-				app.Logger.Info("Updated metadata for table", zap.String("table", tableName), zap.Strings("columns", columnNames))
+				app.Logger.Info("Updated metadata for table", zap.String("table", tableName),
+					zap.Strings("columns", columnNames))
 
 			}
 
@@ -202,7 +208,9 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 			schemaName := string(e.Schema)
 			tableName := string(e.Table)
 
-			app.Logger.Info("TableMapEvent detected", zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID), zap.Uint32("position", app.BinLogPosition), zap.String("file", app.BinLogFile))
+			app.Logger.Info("TableMapEvent detected", zap.String("schema", schemaName),
+				zap.String("table", tableName), zap.Uint64("table_id", tableID),
+				zap.Uint32("position", app.BinLogPosition), zap.String("file", app.BinLogFile))
 
 			// Check if table metadata is already stored in memory
 			_, exists := tableMetadata[tableName]
@@ -211,11 +219,13 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 				// If not exists, get the column names and store them in memory
 				columnNames, err := getColumnNames(schemaName, tableName)
 				if err != nil {
-					app.Logger.Info("Error getting columns for table", zap.String("table", tableName), zap.Error(err))
+					app.Logger.Info("Error getting columns for table", zap.String("table", tableName),
+						zap.Error(err))
 				}
 
 				tableMetadata[tableName] = columnNames
-				app.Logger.Info("Found columns for table", zap.String("table", tableName), zap.Strings("columns", columnNames))
+				app.Logger.Info("Found columns for table", zap.String("table", tableName),
+					zap.Strings("columns", columnNames))
 
 			}
 
@@ -247,7 +257,10 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 				eventStr = "DELETE"
 			}
 
-			app.Logger.Info("Found event", zap.String("event", eventStr), zap.String("schema", schemaName), zap.String("table", tableName), zap.Uint64("table_id", tableID), zap.Uint32("position", app.BinLogPosition), zap.String("file", app.BinLogFile))
+			app.Logger.Info("Found event", zap.String("event", eventStr),
+				zap.String("schema", schemaName), zap.String("table", tableName),
+				zap.Uint64("table_id", tableID), zap.Uint32("position", app.BinLogPosition),
+				zap.String("file", app.BinLogFile))
 
 			// For UPDATE, the event receives the values in pairs (OLD, NEW), so we only take the NEW values
 			// For INSERT and DELETE, the event receives the values directly

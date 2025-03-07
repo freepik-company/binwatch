@@ -1,17 +1,41 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package hashring
 
 import (
-	"binwatch/api/v1alpha1"
+	//
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
 	"net/http"
+
+	//
+	"go.uber.org/zap"
+
+	//
+	"binwatch/api/v1alpha1"
 )
 
+// runHashRingAPI starts the API server for the hashring
 func (h *HashRing) runHashRingAPI(app *v1alpha1.Application) {
 
-	// Start the API server
+	// Define the API routes
+	// Health check
 	http.HandleFunc("/health", h.hashRingHealthHandler)
+	// Binlog position
 	http.HandleFunc("/position", func(w http.ResponseWriter, r *http.Request) {
 		h.hashRingBinLogPositionHandler(w, r, app)
 	})
@@ -25,22 +49,32 @@ func (h *HashRing) runHashRingAPI(app *v1alpha1.Application) {
 	}()
 }
 
+// hashRingHealthHandler is the handler for the health check
 func (h *HashRing) hashRingHealthHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+
+	// Healthcheck
+	if h.runHealthCheck() {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("NOK"))
+	}
 }
 
+// hashRingBinLogPositionHandler is the handler for the binlog position
 func (h *HashRing) hashRingBinLogPositionHandler(w http.ResponseWriter, r *http.Request, app *v1alpha1.Application) {
 
+	// Create the response
 	response := map[string]interface{}{
 		"file":     app.BinLogFile,
 		"position": app.BinLogPosition,
 	}
 
-	// Convertir a JSON
+	// Convert to JSON
 	jsonResponse, err := json.Marshal(response)
 	if err != nil {
-		http.Error(w, "Error generando JSON", http.StatusInternalServerError)
+		http.Error(w, "Error generating JSON", http.StatusInternalServerError)
 		return
 	}
 
@@ -48,4 +82,9 @@ func (h *HashRing) hashRingBinLogPositionHandler(w http.ResponseWriter, r *http.
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonResponse)
+}
+
+// runHealthCheck runs the health check
+func (h *HashRing) runHealthCheck() bool {
+	return len(h.GetServerList()) > 0
 }

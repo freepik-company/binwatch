@@ -1,7 +1,22 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package mysql
 
 import (
-	"binwatch/internal/hashring"
 	//
 	"database/sql"
 	"fmt"
@@ -16,6 +31,7 @@ import (
 	"binwatch/api/v1alpha1"
 	"binwatch/internal/connectors/pubsub"
 	"binwatch/internal/connectors/webhook"
+	"binwatch/internal/hashring"
 )
 
 // getColumnNames function to get the column names of a table
@@ -128,7 +144,7 @@ func getMinimalBinlogPosition(app *v1alpha1.Application, ring *hashring.HashRing
 		}
 
 		//
-		p, f, err := ring.GetServerBinlogPositionBackup(server)
+		p, f, err := ring.GetServerBinlogPositionMem(server)
 		if err != nil {
 			app.Logger.Error(fmt.Sprintf("Error getting binlog position for server %s", server), zap.Error(err))
 			continue
@@ -161,7 +177,8 @@ func getMinimalBinlogPosition(app *v1alpha1.Application, ring *hashring.HashRing
 	}
 
 	if initialized {
-		app.Logger.Info(fmt.Sprintf("Most behind binlog position found in file %s at position %d from server %s", minFile, minPosition, serverInitialized),
+		app.Logger.Info(fmt.Sprintf("Most behind binlog position found in file %s at position %d from server %s",
+			minFile, minPosition, serverInitialized),
 			zap.String("file", minFile),
 			zap.Uint32("position", minPosition))
 		return minPosition, minFile, nil

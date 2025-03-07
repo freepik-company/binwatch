@@ -16,7 +16,6 @@ We use the [go-mysql](https://github.com/go-mysql-org/go-mysql) library to read 
 To configure the tool, you need to create a YAML configuration file. Below is a configuration example:
 ```yaml
 ---
----
 # BinWatch configuration file
 # This file is written in YAML format
 
@@ -147,6 +146,23 @@ all three nodes.
 > This hashring solution may lead to duplicate events during brief periods of time, but this approach was deliberately 
 > chosen to ensure high availability and recovery from failures. Furthermore, we've determined that duplicating events 
 > is preferable to losing them, as duplicates can be handled by the destination connector.
+
+## Sources
+
+| Sources    | Status |
+|------------|---|
+| MySQL      | ✅|
+| PostgreSQL | 🔜|
+
+## Connectors
+
+| Connectors | Status |
+|------------|--------|
+| Webhook    | ✅|
+| GCP PubSub | ✅|
+| Kafka      | 🔜|
+| RabbitMQ   | 🔜|
+| AWS SQS    | 🔜|
 
 ## Deployment
 We recommend to deploy BinWatch application with our [Helm registry](https://freepik-company.github.io/binwatch/).

@@ -70,7 +70,8 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 
 			discoveredIps, err := net.LookupIP(app.Config.Hashring.DnsRingDiscovery.Domain)
 			if err != nil {
-				app.Logger.Error("error looking up", zap.String("domain", app.Config.Hashring.DnsRingDiscovery.Domain), zap.Error(err))
+				app.Logger.Error(fmt.Sprintf("Error looking up domain %s",
+					app.Config.Hashring.DnsRingDiscovery.Domain), zap.Error(err))
 			}
 
 			for _, discoveredIp := range discoveredIps {
@@ -89,7 +90,7 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 			}
 
 			if err != nil || resp.StatusCode != 200 {
-				app.Logger.Error("unable to perform healthcheck on host with http", zap.String("peer", backend), zap.Error(err))
+				app.Logger.Error(fmt.Sprintf("Unable to perform healthcheck on host %s with http", backend), zap.Error(err))
 			}
 
 		}
@@ -112,66 +113,46 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 		}
 
 		for _, server := range appendServersList {
-			app.Logger.Info("adding server to hashring", zap.String("server_added", server))
+			app.Logger.Info(fmt.Sprintf("Adding server %s to hashring", server))
 			h.AddServer(app, server)
 		}
 
 		// If there are servers to delete, we remove them from the hashring and update the binlog position to the lowest
 		// node removed position in the hashring
-		for _, server := range deleteServersList { // Fixed the syntax error in "for *, server"
-			app.Logger.Info("removing server from hashring", zap.String("server", server)) // Fixed "server*removed" to "server"
+		for _, server := range deleteServersList {
+			app.Logger.Info(fmt.Sprintf("Removing server %s from hashring", server))
 
-			rollBackPosition, rollBackFile, err := h.GetServerBinlogPositionBackup(server)
+			// Get the last binlog position for the server stored in memory
+			rollBackPosition, rollBackFile, err := h.GetServerBinlogPositionMem(server)
 			if err != nil {
-				app.Logger.Error("unable to get binlog position", zap.String("server", server), zap.Error(err))
+				app.Logger.Error(fmt.Sprintf("Unable to get binlog position for server %s, using "+
+					"this server last positions", server), zap.Error(err))
 				rollBackPosition = app.RollBackPosition
 				rollBackFile = app.RollBackFile
 			}
 
 			// Need to compare files properly before comparing positions
 			if rollBackFile != app.BinLogFile {
-				// Handle different file names - this requires additional logic to determine which file is older
-				// Simple string comparison might not be correct for binlog files with numeric sequences
-				if rollBackFile < app.BinLogFile { // This assumes lexicographical comparison is valid
-					app.Logger.Info("rolling back binlog file and position", zap.String("server", server),
-						zap.Uint32("position", rollBackPosition), zap.String("file", rollBackFile))
-					app.RollBackPosition = rollBackPosition
-					app.RollBackFile = rollBackFile
-				}
-			} else if rollBackPosition < app.BinLogPosition {
-				// If same file, compare positions
-				app.Logger.Info("rolling back binlog position", zap.String("server", server),
+				// If files are different, always alive server will have the newest binlog file, so the safest way
+				// is to rollback to the last position of the server that left the hashring
+				app.Logger.Info(fmt.Sprintf("Rolling back binlog file and position from server %s", server),
 					zap.Uint32("position", rollBackPosition), zap.String("file", rollBackFile))
 				app.RollBackPosition = rollBackPosition
 				app.RollBackFile = rollBackFile
-			} else {
-				app.Logger.Info("binlog position is ahead of server", zap.String("server", server),
-					zap.Uint32("position", rollBackPosition), zap.String("file", rollBackFile),
-					zap.String("current_file", app.BinLogFile), zap.Uint32("current_position", app.BinLogPosition))
+			} else if rollBackPosition < app.BinLogPosition {
+				// If same file, compare positions
+				app.Logger.Info(fmt.Sprintf("Rolling back binlog position from server %s", server),
+					zap.Uint32("position", rollBackPosition), zap.String("file", rollBackFile))
+				app.RollBackPosition = rollBackPosition
+				app.RollBackFile = rollBackFile
 			}
 
 			// Then remove the server
 			h.RemoveServer(server)
 		}
 
-		//
-		currentServers := h.GetServerList()
-		if len(currentServers) > 0 {
-			for _, server := range currentServers {
-				if server == app.Config.ServerName {
-
-					continue
-				}
-
-			}
-		}
-
 		// Sync binlog positions for all the nodes in the hashring
 		h.SyncBinLogPositions(app)
-
-		if len(currentServers) == 0 {
-			app.Logger.Info("empty hashring", zap.String("nodes", h.String()))
-		}
 
 		time.Sleep(syncTime)
 	}
