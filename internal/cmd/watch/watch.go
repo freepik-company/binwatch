@@ -105,10 +105,10 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 	// If hashring is present, wait for the server list to be populated, any other case continue
 	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
 		for {
-			app.Logger.Info("Waiting for hashring servers to be ready...")
 			if len(hr.GetServerList()) != 0 {
 				break
 			}
+			app.Logger.Info("Waiting for hashring servers to be ready")
 			time.Sleep(1 * time.Second)
 		}
 	}

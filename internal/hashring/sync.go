@@ -83,6 +83,13 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 		hClient := http.Client{}
 		hClient.Timeout = time.Duration(1) * time.Second
 		for _, backend := range tmpHostPool {
+
+			// If it's the same host, skip the healthcheck
+			if backend == app.Config.ServerName {
+				hostPool = append(hostPool, backend)
+				continue
+			}
+
 			// Execute healthcheck to http://<HOST+IP>/health
 			resp, err := hClient.Get(fmt.Sprintf("http://%s/health", backend))
 			if err == nil && resp.StatusCode == 200 {
