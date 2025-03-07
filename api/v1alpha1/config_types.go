@@ -67,6 +67,7 @@ type MySQLConfig struct {
 	ReadTimeout     int           `yaml:"read_timeout"`
 	HeartbeatPeriod int           `yaml:"heartbeat_period"`
 	FilterTables    []FilterTable `yaml:"filter_tables"`
+	DumpWorkers     int           `yaml:"dump_workers"`
 }
 
 // FilterTable

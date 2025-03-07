@@ -19,6 +19,7 @@ package mysql
 import (
 	//
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -127,12 +128,12 @@ func executeConnectors(app *v1alpha1.Application, eventStr string, jsonData []by
 		if slices.Contains(connector.Events, event) && connector.Connector == "webhook" {
 			app.Logger.Debug("Sending data to webhook connector", zap.String("connector", connector.Connector),
 				zap.String("data", string(jsonData)), zap.String("event", event))
-			go webhook.Send(app, connector.Data, jsonData)
+			webhook.Send(app, connector.Data, jsonData)
 		}
 		if slices.Contains(connector.Events, event) && connector.Connector == "pubsub" {
 			app.Logger.Debug("Sending data to pubsub connector", zap.String("connector", connector.Connector),
 				zap.String("data", string(jsonData)), zap.String("event", event))
-			go pubsub.Send(app, connector.Data, jsonData)
+			pubsub.Send(app, connector.Data, jsonData)
 		}
 	}
 
@@ -195,4 +196,270 @@ func getMinimalBinlogPosition(app *v1alpha1.Application, ring *hashring.HashRing
 
 	app.Logger.Warn("Could not determine binlog position from any server")
 	return minPosition, minFile, nil
+}
+
+func processEventBinLog(app *v1alpha1.Application, ev *replication.BinlogEvent) (err error) {
+	// Handle the event
+	switch e := ev.Event.(type) {
+
+	// For query events (main case for STATEMENT bin-log configuration but also used in ROW) (DDL)
+	case *replication.QueryEvent:
+
+		// Get the query and print it
+		query := string(e.Query)
+
+		app.Logger.Info("Executed query for Schema", zap.String("schema", string(e.Schema)),
+			zap.String("query", query), zap.Uint32("position", app.BinLogPosition),
+			zap.String("file", app.BinLogFile))
+
+		// If the query is an ALTER TABLE, clean up the memory used for the table metadata, so when an insert
+		// is executed, the tableID is increased by one.
+		matches := alterTableRegex.FindStringSubmatch(query)
+		if len(matches) > 1 {
+
+			// Get the table name
+			tableName := strings.Trim(matches[1], "`")
+
+			// Get the column names
+			// Print the message to get to know the user that the columns are being retrieved from MySQL so it's a query
+			app.Logger.Info("Getting columns for table", zap.String("table", tableName))
+			columnNames, err := getColumnNames(app, string(e.Schema), tableName)
+			if err != nil {
+				return fmt.Errorf("error getting columns after ALTER TABLE: %v", err)
+			}
+
+			// Replace table columns in memory
+			tableMetadata[tableName] = columnNames
+			app.Logger.Info("Updated metadata for table", zap.String("table", tableName),
+				zap.Strings("columns", columnNames))
+
+		}
+
+		return nil
+
+	// Capture TableMapEvent to get the column names. Before a RowsEvent normally (with bin-log format ROW) (DML)
+	// there are a TableMapEvent which the table and its metadata (columns).
+	case *replication.TableMapEvent:
+
+		// Get the table ID, schema and table name
+		tableID := e.TableID
+		schemaName := string(e.Schema)
+		tableName := string(e.Table)
+
+		app.Logger.Info("TableMapEvent detected", zap.String("schema", schemaName),
+			zap.String("table", tableName), zap.Uint64("table_id", tableID),
+			zap.Uint32("position", app.BinLogPosition), zap.String("file", app.BinLogFile))
+
+		// Check if table metadata is already stored in memory
+		_, exists := tableMetadata[tableName]
+		if !exists {
+
+			// If not exists, get the column names and store them in memory
+			columnNames, err := getColumnNames(app, schemaName, tableName)
+			if err != nil {
+				return fmt.Errorf("error getting columns for table %s : %v", tableName, err)
+			}
+
+			tableMetadata[tableName] = columnNames
+			app.Logger.Info("Found columns for table", zap.String("table", tableName),
+				zap.Strings("columns", columnNames))
+
+		}
+
+		return nil
+
+	// For RowsEvent (DML) when bin-log format is ROW
+	case *replication.RowsEvent:
+
+		// Get the table ID and name
+		tableID := e.TableID
+		schemaName := string(e.Table.Schema)
+		tableName := string(e.Table.Table)
+
+		// Get the column names from memory, if not exists, skip the event (it must exist so always before a
+		// RowsEvent there is a TableMapEvent)
+		columnNames, ok := tableMetadata[tableName]
+		if !ok {
+			return fmt.Errorf("not found table %s metadata in memory", tableName)
+		}
+
+		// Map the event type to a string for printing and verbosity
+		eventType := ev.Header.EventType
+		eventStr := ""
+		switch eventType {
+		case replication.WRITE_ROWS_EVENTv2:
+			eventStr = "INSERT"
+		case replication.UPDATE_ROWS_EVENTv2:
+			eventStr = "UPDATE"
+		case replication.DELETE_ROWS_EVENTv2:
+			eventStr = "DELETE"
+		}
+
+		app.Logger.Info("Found event", zap.String("event", eventStr),
+			zap.String("schema", schemaName), zap.String("table", tableName),
+			zap.Uint64("table_id", tableID), zap.Uint32("position", app.BinLogPosition),
+			zap.String("file", app.BinLogFile))
+
+		// For UPDATE, the event receives the values in pairs (OLD, NEW), so we only take the NEW values
+		// For INSERT and DELETE, the event receives the values directly
+		init := 0
+		hop := 1
+		if eventType == replication.UPDATE_ROWS_EVENTv2 {
+			init = 1
+			hop = 2
+		}
+
+		// Iterate over the rows
+		for i := init; i < len(e.Rows); i += hop {
+
+			// Get the new row
+			row := e.Rows[i]
+
+			err = processRow(app, eventStr, schemaName, tableName, columnNames, row)
+			if err != nil {
+				return fmt.Errorf("error processing row: %v", err)
+			}
+
+		}
+		return nil
+	}
+	return nil
+}
+
+func processRow(app *v1alpha1.Application, eventStr, schema, table string, columnNames []string, row []interface{}) error {
+
+	// Map the row values to the column names
+	rowMap := make(map[string]interface{})
+	for idx, value := range row {
+		if idx < len(columnNames) {
+			rowMap[columnNames[idx]] = value
+		} else {
+			rowMap[fmt.Sprintf("unknown_col_%d", idx)] = value
+		}
+	}
+
+	// Convert the row to JSON
+	jsonData, err := json.Marshal(rowMap)
+	if err != nil {
+		return fmt.Errorf("error marshaling json data: %v", err)
+	}
+
+	// Print the JSON data
+	app.Logger.Debug("JSON data", zap.String("data", string(jsonData)))
+
+	// Send the JSON data to connectors
+	executeConnectors(app, eventStr, jsonData)
+
+	return nil
+}
+
+// preloadTableMetadata loads the column names for the specified tables
+func preloadTableMetadata(app *v1alpha1.Application, database string, tables []string) error {
+	for _, table := range tables {
+		columnNames, err := getColumnNames(app, database, table)
+		if err != nil {
+			return fmt.Errorf("error getting columns for table %s: %w", table, err)
+		}
+
+		tableMetadata[table] = columnNames
+		app.Logger.Info("Preloaded columns for table",
+			zap.String("table", table),
+			zap.Strings("columns", columnNames))
+	}
+	return nil
+}
+
+// truncateString function to truncate a string to a maximum length
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// extractValuesFromInsert extract the values from the INSERT INTO statement
+func extractValuesFromInsert(line string) []string {
+
+	// Find the VALUES part of the INSERT INTO statement
+	parts := strings.Split(line, "VALUES")
+	if len(parts) < 2 {
+		return nil
+	}
+
+	// Get the values part
+	valuesPart := strings.TrimSpace(parts[1])
+
+	// Remove the final ; if exists
+	valuesPart = strings.TrimRight(valuesPart, ";")
+
+	// Find all the rows between parentheses
+	values := []string{}
+	start := -1
+	level := 0
+
+	for i, c := range valuesPart {
+		if c == '(' {
+			if level == 0 {
+				start = i
+			}
+			level++
+		} else if c == ')' {
+			level--
+			if level == 0 && start != -1 {
+				values = append(values, valuesPart[start+1:i])
+				start = -1
+			}
+		}
+	}
+
+	return values
+}
+
+// parseRowValues analyze a row string and return the values as a slice of interfaces
+func parseRowValues(rowStr string) []interface{} {
+
+	// Esta es una versión simplificada. El parsing real de valores de MySQL es más complejo
+	// debido a los diferentes tipos de datos y escapes.
+	var result []interface{}
+
+	// Estado del parser
+	var currentValue strings.Builder
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(rowStr); i++ {
+		c := rowStr[i]
+
+		// Manejar comillas
+		if c == '\'' && !escaped {
+			inString = !inString
+			continue
+		}
+
+		// Manejar escapes
+		if c == '\\' && !escaped {
+			escaped = true
+			continue
+		}
+
+		// Si es una coma fuera de una cadena, finaliza el valor actual
+		if c == ',' && !inString {
+			// Agregar el valor al resultado
+			val := currentValue.String()
+			result = append(result, val)
+			currentValue.Reset()
+			continue
+		}
+
+		// Agregar el carácter al valor actual
+		currentValue.WriteByte(c)
+		escaped = false
+	}
+
+	// Agregar el último valor
+	if currentValue.Len() > 0 {
+		result = append(result, currentValue.String())
+	}
+
+	return result
 }

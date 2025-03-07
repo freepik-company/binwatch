@@ -65,6 +65,9 @@ sources:
       - database: test
         table: test
 
+    # For dump command, number of workers to use for dumping and processing the events
+    dump_workers: 4
+
 # Data connectors configuration
 # List of connectors to send the data to
 connectors:
