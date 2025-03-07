@@ -35,7 +35,16 @@ import (
 )
 
 // getColumnNames function to get the column names of a table
-func getColumnNames(schema, table string) ([]string, error) {
+func getColumnNames(app *v1alpha1.Application, schema, table string) (columnNames []string, err error) {
+
+	// Open the connection to the MySQL server.
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/", app.Config.Sources.MySQL.User, app.Config.Sources.MySQL.Password,
+		app.Config.Sources.MySQL.Host, app.Config.Sources.MySQL.Port)
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
 
 	// Query to get the columns
 	query := fmt.Sprintf("SHOW COLUMNS FROM `%s`.`%s`", schema, table)
@@ -46,11 +55,10 @@ func getColumnNames(schema, table string) ([]string, error) {
 	defer rows.Close()
 
 	// Iterate over the rows and get the column names
-	var columnNames []string
 	for rows.Next() {
 		var colName string
 		var colType, colNull, colKey, colDefault, colExtra sql.NullString
-		if err := rows.Scan(&colName, &colType, &colNull, &colKey, &colDefault, &colExtra); err != nil {
+		if err = rows.Scan(&colName, &colType, &colNull, &colKey, &colDefault, &colExtra); err != nil {
 			return nil, err
 		}
 		columnNames = append(columnNames, colName)
@@ -70,6 +78,7 @@ func getMasterStatus(app *v1alpha1.Application) (binLogPos uint32, binLogFile st
 	if err != nil {
 		return binLogPos, binLogFile, err
 	}
+	defer db.Close()
 
 	// Query to get the master status
 	err = db.QueryRow("SHOW MASTER STATUS").Scan(&binLogFile, &binLogPos, new(interface{}), new(interface{}), new(interface{}))
@@ -139,7 +148,7 @@ func getMinimalBinlogPosition(app *v1alpha1.Application, ring *hashring.HashRing
 	for _, server := range servers {
 
 		// Skip the current server
-		if server == app.Config.ServerName {
+		if server == app.Config.ServerId {
 			continue
 		}
 

@@ -87,7 +87,7 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 	app.Config = &configContent
 
 	// Check that server name is configured
-	if app.Config.ServerName == "" {
+	if app.Config.ServerId == "" {
 		app.Logger.Fatal("Server name is required in configuration file `server_name`.")
 	}
 

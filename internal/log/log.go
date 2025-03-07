@@ -72,7 +72,7 @@ func ConfigureLogger(app *v1alpha1.Application) (logger *zap.Logger, err error) 
 	}
 
 	// Add server name to logger
-	logger = logger.With(zap.String("server", app.Config.ServerName))
+	logger = logger.With(zap.String("server", app.Config.ServerId))
 
 	return logger, err
 }

@@ -30,9 +30,9 @@ logger:
   # console or json
   encoding: json
 
-# Server name of the binwatch instance. Can be set via environment variable which will be replaced at runtime
+# Server id of the binwatch instance. Can be set via environment variable which will be replaced at runtime
 # It must have the format <hostname>:<port> or <ip>:<port> to be used in the hashring
-server_name: "$HOSTNAME:8080"
+server_id: "$HOSTNAME:8080"
 
 # Hashring configuration for HA and load balancing purposes
 hashring:
@@ -163,6 +163,7 @@ all three nodes.
 | Kafka      | 🔜|
 | RabbitMQ   | 🔜|
 | AWS SQS    | 🔜|
+| Nats       | 🔜|
 
 ## Deployment
 We recommend to deploy BinWatch application with our [Helm registry](https://freepik-company.github.io/binwatch/).
@@ -240,7 +241,7 @@ configMap:
         level: debug
         encoding: json
       
-      server_name: "$POD_IP:8080"
+      server_id: "$POD_IP:8080"
         
       hashring:
         sync_worker_time_ms: 300

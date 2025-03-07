@@ -22,7 +22,7 @@ type ConfigSpec struct {
 	Sources    SourcesConfig    `yaml:"sources"`
 	Connectors ConnectorsConfig `yaml:"connectors"`
 	Hashring   HashringConfig   `yaml:"hashring"`
-	ServerName string           `yaml:"server_name"`
+	ServerId   string           `yaml:"server_id"`
 }
 
 // HashringConfig

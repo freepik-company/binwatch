@@ -13,9 +13,9 @@ logger:
   # console or json
   encoding: json
 
-# Server name of the binwatch instance. Can be set via environment variable which will be replaced at runtime
+# Server id of the binwatch instance. Can be set via environment variable which will be replaced at runtime
 # It must have the format <hostname>:<port> or <ip>:<port> to be used in the hashring
-server_name: "$HOSTNAME:$PORT"
+server_id: "$HOSTNAME:$PORT"
 
 # Hashring configuration for HA and load balancing purposes
 # hashring:

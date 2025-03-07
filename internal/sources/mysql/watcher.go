@@ -74,7 +74,6 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 		if err != nil {
 			app.Logger.Error("Error getting actual position of binlog", zap.Error(err))
 		}
-		db.Close()
 	}
 
 	app.Logger.Info("Starting binlog capture", zap.String("binlog_file", binLogFile),
@@ -158,7 +157,7 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 			t := time.Now()
 			severAssigned := ring.GetServer(t.Format("20060102150405"))
 			app.Logger.Debug(fmt.Sprintf("Server assigned: %s", severAssigned))
-			if app.Config.ServerName != severAssigned {
+			if app.Config.ServerId != severAssigned {
 				continue
 			}
 		}
@@ -187,7 +186,7 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 				// Get the column names
 				// Print the message to get to know the user that the columns are being retrieved from MySQL so it's a query
 				app.Logger.Info("Getting columns for table", zap.String("table", tableName))
-				columnNames, err := getColumnNames(string(e.Schema), tableName)
+				columnNames, err := getColumnNames(app, string(e.Schema), tableName)
 				if err != nil {
 					app.Logger.Info("Error getting columns after ALTER TABLE", zap.Error(err))
 				}
@@ -217,7 +216,7 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 			if !exists {
 
 				// If not exists, get the column names and store them in memory
-				columnNames, err := getColumnNames(schemaName, tableName)
+				columnNames, err := getColumnNames(app, schemaName, tableName)
 				if err != nil {
 					app.Logger.Info("Error getting columns for table", zap.String("table", tableName),
 						zap.Error(err))

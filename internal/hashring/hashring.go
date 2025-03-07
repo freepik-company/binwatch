@@ -84,13 +84,13 @@ func (h *HashRing) AddServer(app *v1alpha1.Application, server string) {
 
 	// Add the binlog position for the server to the hashring.
 	// If the server is the same as the current server, use the current binlog position
-	if server == app.Config.ServerName {
+	if server == app.Config.ServerId {
 		h.binlogPositions = append(h.binlogPositions, BinlogPositions{Server: server,
 			BinlogPosition: app.BinLogPosition, BinlogFile: app.BinLogFile})
 	}
 
 	// If the server is different, get the binlog position from the server via HTTP request
-	if server != app.Config.ServerName {
+	if server != app.Config.ServerId {
 		binlogPosition, binLogFile, err := h.GetServerBinlogPosition(server)
 		if err != nil {
 			app.Logger.Error(fmt.Sprintf("Error getting binlog position for server %s", server), zap.Error(err))
@@ -191,7 +191,7 @@ func (h *HashRing) SyncBinLogPositions(app *v1alpha1.Application) {
 	for i, node := range h.binlogPositions {
 
 		// If the server is the same as the current server, use the current binlog position
-		if node.Server == app.Config.ServerName {
+		if node.Server == app.Config.ServerId {
 			app.Logger.Debug("syncing binlog positions for this server", zap.String("file", app.BinLogFile),
 				zap.Uint32("position", app.BinLogPosition))
 			h.binlogPositions[i].BinlogPosition = app.BinLogPosition

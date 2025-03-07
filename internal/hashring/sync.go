@@ -85,7 +85,7 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 		for _, backend := range tmpHostPool {
 
 			// If it's the same host, skip the healthcheck
-			if backend == app.Config.ServerName {
+			if backend == app.Config.ServerId {
 				hostPool = append(hostPool, backend)
 				continue
 			}
