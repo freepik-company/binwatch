@@ -154,6 +154,10 @@ all three nodes.
 | MySQL      | ✅|
 | PostgreSQL | 🔜|
 
+> [!IMPORTANT]
+> For MySQL connector just supports binlog format ROW. For binlog format STATEMENT or MIXED, the connector will not work,
+> we are working on it :D.
+
 ## Connectors
 
 | Connectors | Status |
@@ -187,9 +191,6 @@ image:
 
 serviceAccount:
   annotations: {}
-
-headlessService:
-  enabled: true
 
 resources:
    limits:
