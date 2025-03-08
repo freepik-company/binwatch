@@ -24,7 +24,7 @@ import (
 	"github.com/spf13/cobra"
 
 	//
-	"binwatch/internal/cmd/dump"
+	"binwatch/internal/cmd/sync"
 	"binwatch/internal/cmd/watch"
 )
 
@@ -46,7 +46,7 @@ func NewRootCommand(name string) *cobra.Command {
 
 	c.AddCommand(
 		watch.NewCommand(),
-		dump.NewCommand(),
+		sync.NewCommand(),
 	)
 
 	return c

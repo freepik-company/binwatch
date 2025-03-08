@@ -315,7 +315,7 @@ func processEventBinLog(app *v1alpha1.Application, ev *replication.BinlogEvent) 
 			// Get the new row
 			row := e.Rows[i]
 
-			err = processRow(app, eventStr, schemaName, tableName, columnNames, row)
+			err = processRow(app, eventStr, columnNames, row)
 			if err != nil {
 				return fmt.Errorf("error processing row: %v", err)
 			}
@@ -326,7 +326,7 @@ func processEventBinLog(app *v1alpha1.Application, ev *replication.BinlogEvent) 
 	return nil
 }
 
-func processRow(app *v1alpha1.Application, eventStr, schema, table string, columnNames []string, row []interface{}) error {
+func processRow(app *v1alpha1.Application, eventStr string, columnNames []string, row []interface{}) error {
 
 	// Map the row values to the column names
 	rowMap := make(map[string]interface{})
@@ -351,115 +351,4 @@ func processRow(app *v1alpha1.Application, eventStr, schema, table string, colum
 	executeConnectors(app, eventStr, jsonData)
 
 	return nil
-}
-
-// preloadTableMetadata loads the column names for the specified tables
-func preloadTableMetadata(app *v1alpha1.Application, database string, tables []string) error {
-	for _, table := range tables {
-		columnNames, err := getColumnNames(app, database, table)
-		if err != nil {
-			return fmt.Errorf("error getting columns for table %s: %w", table, err)
-		}
-
-		tableMetadata[table] = columnNames
-		app.Logger.Info("Preloaded columns for table",
-			zap.String("table", table),
-			zap.Strings("columns", columnNames))
-	}
-	return nil
-}
-
-// truncateString function to truncate a string to a maximum length
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-// extractValuesFromInsert extract the values from the INSERT INTO statement
-func extractValuesFromInsert(line string) []string {
-
-	// Find the VALUES part of the INSERT INTO statement
-	parts := strings.Split(line, "VALUES")
-	if len(parts) < 2 {
-		return nil
-	}
-
-	// Get the values part
-	valuesPart := strings.TrimSpace(parts[1])
-
-	// Remove the final ; if exists
-	valuesPart = strings.TrimRight(valuesPart, ";")
-
-	// Find all the rows between parentheses
-	values := []string{}
-	start := -1
-	level := 0
-
-	for i, c := range valuesPart {
-		if c == '(' {
-			if level == 0 {
-				start = i
-			}
-			level++
-		} else if c == ')' {
-			level--
-			if level == 0 && start != -1 {
-				values = append(values, valuesPart[start+1:i])
-				start = -1
-			}
-		}
-	}
-
-	return values
-}
-
-// parseRowValues analyze a row string and return the values as a slice of interfaces
-func parseRowValues(rowStr string) []interface{} {
-
-	// Esta es una versión simplificada. El parsing real de valores de MySQL es más complejo
-	// debido a los diferentes tipos de datos y escapes.
-	var result []interface{}
-
-	// Estado del parser
-	var currentValue strings.Builder
-	inString := false
-	escaped := false
-
-	for i := 0; i < len(rowStr); i++ {
-		c := rowStr[i]
-
-		// Manejar comillas
-		if c == '\'' && !escaped {
-			inString = !inString
-			continue
-		}
-
-		// Manejar escapes
-		if c == '\\' && !escaped {
-			escaped = true
-			continue
-		}
-
-		// Si es una coma fuera de una cadena, finaliza el valor actual
-		if c == ',' && !inString {
-			// Agregar el valor al resultado
-			val := currentValue.String()
-			result = append(result, val)
-			currentValue.Reset()
-			continue
-		}
-
-		// Agregar el carácter al valor actual
-		currentValue.WriteByte(c)
-		escaped = false
-	}
-
-	// Agregar el último valor
-	if currentValue.Len() > 0 {
-		result = append(result, currentValue.String())
-	}
-
-	return result
 }

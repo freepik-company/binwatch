@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package dump
+package sync
 
 import (
 	//
@@ -33,21 +33,21 @@ import (
 )
 
 const (
-	descriptionShort = `Dump MySQL and send to Connectors`
+	descriptionShort = `Dump and watch (sync) MySQL and send to Connectors`
 	descriptionLong  = `
-	Dump MySQL and send to Connectors for processing and storage.
+	Dump and watch (sync) MySQL and send to Connectors for processing and storage.
 	`
 )
 
 // NewCommand TODO
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:                   "dump",
+		Use:                   "sync",
 		DisableFlagsInUseLine: true,
 		Short:                 descriptionShort,
 		Long:                  strings.ReplaceAll(descriptionLong, "\t", ""),
 
-		Run: DumpCommand,
+		Run: SyncCommand,
 	}
 
 	cmd.Flags().String("config", "config.yaml", "Path to the YAML config file")
@@ -55,8 +55,8 @@ func NewCommand() *cobra.Command {
 	return cmd
 }
 
-// DumpCommand TODO
-func DumpCommand(cmd *cobra.Command, args []string) {
+// SyncCommand TODO
+func SyncCommand(cmd *cobra.Command, args []string) {
 
 	// Configure application's context
 	app := v1alpha1.Application{
@@ -91,10 +91,10 @@ func DumpCommand(cmd *cobra.Command, args []string) {
 	}
 	app.Logger = logger
 
-	// Run MySQL Dumper if MySQL config is present
+	// Run MySQL Sync if MySQL config is present
 	if !reflect.DeepEqual(app.Config.Sources.MySQL, v1alpha1.MySQLConfig{}) {
 		app.Logger.Info("Starting MySQL dumper")
-		mysql.Dumper(&app)
+		mysql.Sync(&app)
 	} else {
 		app.Logger.Fatal("No connector configuration found")
 	}

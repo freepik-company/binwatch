@@ -65,8 +65,14 @@ sources:
       - database: test
         table: test
 
-    # For dump command, number of workers to use for dumping and processing the events
-    dump_workers: 4
+    # Mysqldump configuration for sync command. Just can dump an entire database, many databases or many tables for ONE database.
+    # If many databases are specefied with tables, the tables will be ignored.
+    dump_config:
+      databases:
+        - test
+      tables:
+        - test
+      mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
 
 # Data connectors configuration
 # List of connectors to send the data to
