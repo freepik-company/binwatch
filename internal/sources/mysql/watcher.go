@@ -20,11 +20,9 @@ import (
 	//
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
-	"strings"
 	"time"
 
 	//
@@ -162,143 +160,9 @@ func Watcher(app *v1alpha1.Application, ring *hashring.HashRing) {
 			}
 		}
 
-		// Handle the event
-		switch e := ev.Event.(type) {
-
-		// For query events (main case for STATEMENT bin-log configuration but also used in ROW) (DDL)
-		case *replication.QueryEvent:
-
-			// Get the query and print it
-			query := string(e.Query)
-
-			app.Logger.Info("Executed query for Schema", zap.String("schema", string(e.Schema)),
-				zap.String("query", query), zap.Uint32("position", app.BinLogPosition),
-				zap.String("file", app.BinLogFile))
-
-			// If the query is an ALTER TABLE, clean up the memory used for the table metadata, so when an insert
-			// is executed, the tableID is increased by one.
-			matches := alterTableRegex.FindStringSubmatch(query)
-			if len(matches) > 1 {
-
-				// Get the table name
-				tableName := strings.Trim(matches[1], "`")
-
-				// Get the column names
-				// Print the message to get to know the user that the columns are being retrieved from MySQL so it's a query
-				app.Logger.Info("Getting columns for table", zap.String("table", tableName))
-				columnNames, err := getColumnNames(app, string(e.Schema), tableName)
-				if err != nil {
-					app.Logger.Info("Error getting columns after ALTER TABLE", zap.Error(err))
-				}
-
-				// Replace table columns in memory
-				tableMetadata[tableName] = columnNames
-				app.Logger.Info("Updated metadata for table", zap.String("table", tableName),
-					zap.Strings("columns", columnNames))
-
-			}
-
-		// Capture TableMapEvent to get the column names. Before a RowsEvent normally (with bin-log format ROW) (DML)
-		// there are a TableMapEvent which the table and its metadata (columns).
-		case *replication.TableMapEvent:
-
-			// Get the table ID, schema and table name
-			tableID := e.TableID
-			schemaName := string(e.Schema)
-			tableName := string(e.Table)
-
-			app.Logger.Info("TableMapEvent detected", zap.String("schema", schemaName),
-				zap.String("table", tableName), zap.Uint64("table_id", tableID),
-				zap.Uint32("position", app.BinLogPosition), zap.String("file", app.BinLogFile))
-
-			// Check if table metadata is already stored in memory
-			_, exists := tableMetadata[tableName]
-			if !exists {
-
-				// If not exists, get the column names and store them in memory
-				columnNames, err := getColumnNames(app, schemaName, tableName)
-				if err != nil {
-					app.Logger.Info("Error getting columns for table", zap.String("table", tableName),
-						zap.Error(err))
-				}
-
-				tableMetadata[tableName] = columnNames
-				app.Logger.Info("Found columns for table", zap.String("table", tableName),
-					zap.Strings("columns", columnNames))
-
-			}
-
-		// For RowsEvent (DML) when bin-log format is ROW
-		case *replication.RowsEvent:
-
-			// Get the table ID and name
-			tableID := e.TableID
-			schemaName := string(e.Table.Schema)
-			tableName := string(e.Table.Table)
-
-			// Get the column names from memory, if not exists, skip the event (it must exist so always before a
-			// RowsEvent there is a TableMapEvent)
-			columnNames, ok := tableMetadata[tableName]
-			if !ok {
-				app.Logger.Info("Not found table metadata in memory", zap.String("table", tableName))
-				continue
-			}
-
-			// Map the event type to a string for printing and verbosity
-			eventType := ev.Header.EventType
-			eventStr := ""
-			switch eventType {
-			case replication.WRITE_ROWS_EVENTv2:
-				eventStr = "INSERT"
-			case replication.UPDATE_ROWS_EVENTv2:
-				eventStr = "UPDATE"
-			case replication.DELETE_ROWS_EVENTv2:
-				eventStr = "DELETE"
-			}
-
-			app.Logger.Info("Found event", zap.String("event", eventStr),
-				zap.String("schema", schemaName), zap.String("table", tableName),
-				zap.Uint64("table_id", tableID), zap.Uint32("position", app.BinLogPosition),
-				zap.String("file", app.BinLogFile))
-
-			// For UPDATE, the event receives the values in pairs (OLD, NEW), so we only take the NEW values
-			// For INSERT and DELETE, the event receives the values directly
-			init := 0
-			hop := 1
-			if eventType == replication.UPDATE_ROWS_EVENTv2 {
-				init = 1
-				hop = 2
-			}
-
-			// Iterate over the rows
-			for i := init; i < len(e.Rows); i += hop {
-
-				// Get the new row
-				row := e.Rows[i]
-
-				// Map the row values to the column names
-				rowMap := make(map[string]interface{})
-				for idx, value := range row {
-					if idx < len(columnNames) {
-						rowMap[columnNames[idx]] = value
-					} else {
-						rowMap[fmt.Sprintf("unknown_col_%d", idx)] = value
-					}
-				}
-
-				// Convert the row to JSON
-				jsonData, err := json.Marshal(rowMap)
-				if err != nil {
-					app.Logger.Info("Error marshaling json data", zap.Error(err))
-					continue
-				}
-
-				// Print the JSON data
-				app.Logger.Debug("JSON data", zap.String("data", string(jsonData)))
-
-				// Send the JSON data to connectors
-				executeConnectors(app, eventStr, jsonData)
-			}
+		err = processEventBinLog(app, ev)
+		if err != nil {
+			app.Logger.Fatal("Error processing event", zap.Error(err))
 		}
 	}
 }
