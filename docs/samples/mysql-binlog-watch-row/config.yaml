@@ -67,6 +67,7 @@ sources:
 
     # Mysqldump configuration for sync command. Just can dump an entire database, many databases or many tables for ONE database.
     # If many databases are specefied with tables, the tables will be ignored.
+    # Empty dump_config disables the previous mysql dump feature.
     dump_config:
       databases:
         - test

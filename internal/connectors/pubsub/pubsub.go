@@ -19,6 +19,7 @@ package pubsub
 import (
 	//
 	"encoding/json"
+	"fmt"
 
 	//
 	"cloud.google.com/go/pubsub"
@@ -30,7 +31,7 @@ import (
 )
 
 // Send sends a message to a PubSub topic
-func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
+func Send(app *v1alpha1.Application, templateData string, jsonData []byte) (err error) {
 
 	logger := app.Logger
 
@@ -39,8 +40,7 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 	// Create the PubSub client
 	pubsubClient, err := pubsub.NewClient(app.Context, app.Config.Connectors.PubSub.ProjectID)
 	if err != nil {
-		logger.Error("Error creating PubSub client", zap.Error(err))
-		return
+		return fmt.Errorf("error creating PubSub client: %v", err)
 	}
 	defer pubsubClient.Close()
 
@@ -48,8 +48,7 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 	data := map[string]interface{}{}
 	err = json.Unmarshal(jsonData, &data)
 	if err != nil {
-		logger.Error("Error parsing JSON data for webhook integration", zap.Error(err))
-		return
+		return fmt.Errorf("error parsing JSON data for webhook integration: %v", err)
 	}
 
 	// Get the topic
@@ -62,8 +61,7 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 	// Evaluate the data template with the injected object
 	parsedMessage, err := template.EvaluateTemplate(templateData, templateInjectedObject)
 	if err != nil {
-		logger.Error("Error evaluating template for webhook integration", zap.Error(err))
-		return
+		return fmt.Errorf("error evaluating template for webhook integration: %v", err)
 	}
 
 	// Publish the message
@@ -74,11 +72,12 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 	// Wait for confirmation
 	id, err := result.Get(app.Context)
 	if err != nil {
-		logger.Error("Error publishing message to pubsub", zap.Error(err))
-		return
+		return fmt.Errorf("error publishing message to pubsub: %v", err)
 	}
 
 	logger.Debug("Message published to pubsub", zap.String("topic", app.Config.Connectors.PubSub.TopicID),
 		zap.String("project", app.Config.Connectors.PubSub.ProjectID), zap.String("id", id))
+
+	return nil
 
 }

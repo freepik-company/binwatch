@@ -4,12 +4,16 @@
 ![GitHub go.mod Go version (subdirectory of monorepo)](https://img.shields.io/github/go-mod/go-version/freepik-company/binwatch)
 ![GitHub](https://img.shields.io/github/license/freepik-company/binwatch)
 
-BinWatch is a tool designed to subscribe to a MySQL database's binlog and track changes that occur in database tables. These changes are processed and sent to supported connectors in real-time.
+BinWatch is a tool designed to subscribe to a MySQL database's binlog and track changes that occur in database tables. 
+These changes are processed and sent to supported connectors in real-time.
 
 ## Motivation
-The motivation behind this tool stems from the need for a system that allows simple, real-time tracking of changes in a MySQL database without requiring complex external tools that might complicate the process.
+The motivation behind this tool stems from the need for a system that allows simple, real-time tracking of changes in
+a MySQL database without requiring complex external tools that might complicate the process.
 
-We use the [go-mysql](https://github.com/go-mysql-org/go-mysql) library to read MySQL binlogs. This library enables us to monitor MySQL binlogs and capture changes occurring in database tables.
+We use the [go-mysql](https://github.com/go-mysql-org/go-mysql) library to read MySQL binlogs, exactly the 
+[canal](https://github.com/go-mysql-org/go-mysql/tree/master/canal) library of this reposiotory. This library enables us
+to monitor MySQL binlogs (and sync data using mysqldump if we want) and capture changes occurring in database tables.
 
 ## Configuration
 
@@ -86,6 +90,17 @@ sources:
     filter_tables:
       - database: test
         table: test
+
+    # Mysqldump configuration for sync command. Just can dump an entire database, many databases or many tables for ONE database.
+    # If many databases are specefied with tables, the tables will be ignored.
+    # Empty dump_config disables the previous mysql dump feature.
+    dump_config:
+      databases:
+        - test
+      tables:
+        - test
+      # Default value is /usr/bin/mysqldump, path where mysqldump is located in the Docker image
+      mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
 
 # Data connectors configuration
 # List of connectors to send the data to
@@ -264,7 +279,12 @@ configMap:
           sync_timeout_ms: 200
           filter_tables:
             - database: test
-              table: test
+              table: test    
+          dump_config:
+              databases:
+                - test
+              tables:
+                - test
       
       connectors:
         routes:

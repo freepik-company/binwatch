@@ -6,9 +6,9 @@ COPY . .
 RUN go build -o /app/binwatch cmd/main.go
 
 FROM alpine:3.18
-RUN apk --no-cache add ca-certificates bash
+RUN apk --no-cache add ca-certificates bash mysql-client
 WORKDIR /app
 COPY --from=builder /app/binwatch /app/
 COPY docs/samples/config-sample.yaml /app/config.yaml
-ENTRYPOINT [ "./binwatch", "watch" ]
+ENTRYPOINT [ "./binwatch", "sync" ]
 CMD ["--config", "/app/config.yaml"]

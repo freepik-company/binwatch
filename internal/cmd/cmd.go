@@ -25,7 +25,6 @@ import (
 
 	//
 	"binwatch/internal/cmd/sync"
-	"binwatch/internal/cmd/watch"
 )
 
 const (
@@ -45,7 +44,6 @@ func NewRootCommand(name string) *cobra.Command {
 	}
 
 	c.AddCommand(
-		watch.NewCommand(),
 		sync.NewCommand(),
 	)
 

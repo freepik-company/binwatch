@@ -22,12 +22,15 @@ import (
 	coreLog "log"
 	"reflect"
 	"strings"
+	"time"
+
 	//
 	"github.com/spf13/cobra"
 
 	//
 	"binwatch/api/v1alpha1"
 	"binwatch/internal/config"
+	"binwatch/internal/hashring"
 	"binwatch/internal/log"
 	"binwatch/internal/sources/mysql"
 )
@@ -91,10 +94,25 @@ func SyncCommand(cmd *cobra.Command, args []string) {
 	}
 	app.Logger = logger
 
+	// Try to add server to the Hashring
+	hr := hashring.NewHashRing(1000)
+	go hr.SyncWorker(&app, time.Duration(app.Config.Hashring.SyncWorkerTimeMs)*time.Millisecond)
+
+	// If hashring is present, wait for the server list to be populated, any other case continue
+	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
+		for {
+			if len(hr.GetServerList()) != 0 {
+				break
+			}
+			app.Logger.Info("Waiting for hashring servers to be ready")
+			time.Sleep(1 * time.Second)
+		}
+	}
+
 	// Run MySQL Sync if MySQL config is present
 	if !reflect.DeepEqual(app.Config.Sources.MySQL, v1alpha1.MySQLConfig{}) {
 		app.Logger.Info("Starting MySQL dumper")
-		mysql.Sync(&app)
+		mysql.Sync(&app, hr)
 	} else {
 		app.Logger.Fatal("No connector configuration found")
 	}

@@ -17,14 +17,15 @@ limitations under the License.
 package hashring
 
 import (
-	"fmt"
 	//
+	"fmt"
 	"net"
 	"net/http"
 	"reflect"
 	"slices"
 	"time"
 
+	//
 	"go.uber.org/zap"
 
 	//
@@ -146,12 +147,14 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 					zap.Uint32("position", rollBackPosition), zap.String("file", rollBackFile))
 				app.RollBackPosition = rollBackPosition
 				app.RollBackFile = rollBackFile
+				app.RollbackNeeded = true
 			} else if rollBackPosition < app.BinLogPosition {
 				// If same file, compare positions
 				app.Logger.Info(fmt.Sprintf("Rolling back binlog position from server %s", server),
 					zap.Uint32("position", rollBackPosition), zap.String("file", rollBackFile))
 				app.RollBackPosition = rollBackPosition
 				app.RollBackFile = rollBackFile
+				app.RollbackNeeded = true
 			}
 
 			// Then remove the server
