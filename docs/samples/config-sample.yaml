@@ -79,7 +79,7 @@ sources:
       tables:
         - test
       # Default value is /usr/bin/mysqldump, path where mysqldump is located in the Docker image
-      mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
+      # mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
 
 # Data connectors configuration
 # List of connectors to send the data to
