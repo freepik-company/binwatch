@@ -184,6 +184,13 @@ all three nodes.
 | AWS SQS    | 🔜|
 | Nats       | 🔜|
 
+## Running BinWatch
+For running binwatch you need to create a configuration file and run the binary with the configuration file as a parameter.
+
+```shell
+go run cmd/main.go sync --config config.yaml
+```
+
 ## Deployment
 We recommend to deploy BinWatch application with our [Helm registry](https://freepik-company.github.io/binwatch/).
 
