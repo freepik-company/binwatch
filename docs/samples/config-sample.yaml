@@ -91,7 +91,7 @@ connectors:
   # Data format is in golang template format. The data read from the binlog will be passed to the template as .data
   routes:
     - events: ["insert", "update", "delete"]
-      connector: webhook
+      connector: webhook-test
       data: |
         {{- printf `{ "index": "test", "id": %v }` .data.id }}
 
@@ -99,11 +99,12 @@ connectors:
 
   # Webhook connector configuration
   webhook:
-    tls_skip_verify: false
-    url: "https://webhook.site/<id>"
-    method: "POST"
-    headers:
-      X-BinWatch: "true"
-  # credentials:
-  #  username: "$WEBHOOK_USERNAME"
-  #  password: "$WEBHOOK_PASSWORD"
+    - name: webhook-test
+      tls_skip_verify: false
+      url: "https://webhook.site/<id>"
+      method: "POST"
+      headers:
+        X-BinWatch: "true"
+    # credentials:
+    #  username: "$WEBHOOK_USERNAME"
+    #  password: "$WEBHOOK_PASSWORD"

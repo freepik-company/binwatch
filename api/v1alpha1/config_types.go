@@ -85,9 +85,9 @@ type FilterTable struct {
 
 // ConnectorsConfig
 type ConnectorsConfig struct {
-	WebHook WebHookConfig `yaml:"webhook"`
-	PubSub  PubSubConfig  `yaml:"pubsub"`
-	Routes  []RouteConfig `yaml:"routes"`
+	WebHook []WebHookConfig `yaml:"webhook"`
+	PubSub  []PubSubConfig  `yaml:"pubsub"`
+	Routes  []RouteConfig   `yaml:"routes"`
 }
 
 // RouteConfig
@@ -99,6 +99,7 @@ type RouteConfig struct {
 
 // WebHookConfig
 type WebHookConfig struct {
+	Name          string            `yaml:"name"`
 	URL           string            `yaml:"url"`
 	Method        string            `yaml:"method"`
 	Headers       map[string]string `yaml:"headers"`
@@ -114,6 +115,7 @@ type Credentials struct {
 
 // PubSubConfig
 type PubSubConfig struct {
+	Name      string `yaml:"name"`
 	ProjectID string `yaml:"project_id"`
 	TopicID   string `yaml:"topic_id"`
 }

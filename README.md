@@ -112,11 +112,11 @@ connectors:
   # Data format is in golang template format. The data read from the binlog will be passed to the template as .data
   routes:
     - events: ["insert", "update"]
-      connector: pubsub
+      connector: pubsub-add
       data: |
         {{- printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
     - events: ["delete"]
-      connector: webhook
+      connector: webhook-delete
       data: |
         {{- printf `{ "index": "test", "id": %v }` .data.id }}
 
@@ -124,19 +124,21 @@ connectors:
 
   # PubSub connector configuration
   pubsub:
-    project_id: "test-project"
-    topic_id: "test-topic"
+    - name: pubsub-add
+      project_id: "test-project"
+      topic_id: "test-topic"
 
   # Webhook connector configuration
   webhook:
-    tls_skip_verify: false
-    url: "https://webhook.site/<id>"
-    method: "POST"
-    headers:
-      X-BinWatch: "true"
-  # credentials:
-  #  username: "$WEBHOOK_USERNAME"
-  #  password: "$WEBHOOK_PASSWORD"
+    - name: webhook-delete
+      tls_skip_verify: false
+      url: "https://webhook.site/<id>"
+      method: "POST"
+      headers:
+        X-BinWatch: "true"
+      # credentials:
+      #  username: "$WEBHOOK_USERNAME"
+      #  password: "$WEBHOOK_PASSWORD"
 ```
 
 ## Hashring - Load Balancing and High Availability Approach
@@ -296,20 +298,21 @@ configMap:
       connectors:
         routes:
           - events: ["insert", "update"]
-            connector: webhook
+            connector: webhook-test
             data: |
               {{- printf `{ "index": "test", "id": %v, "data": %s }` .data.id ( toJson .data ) }}
           - events: ["delete"]
-            connector: webhook
+            connector: webhook-test
             data: |
               {{- printf `{ "index": "test", "id": %v }` .data.id }}
 
         webhook:
-          tls_skip_verify: false
-          url: "$WEBHOOK_URL"
-          method: "POST"
-          headers:
-            X-BinWatch: "true"
+          - name: webhook-test
+            tls_skip_verify: false
+            url: "$WEBHOOK_URL"
+            method: "POST"
+            headers:
+              X-BinWatch: "true"
 ```
 ## How to collaborate
 

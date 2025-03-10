@@ -34,7 +34,7 @@ import (
 )
 
 // Send sends a message to a webhook
-func Send(app *v1alpha1.Application, templateData string, jsonData []byte) (err error) {
+func Send(app *v1alpha1.Application, templateData string, wh v1alpha1.WebHookConfig, jsonData []byte) (err error) {
 
 	logger := app.Logger
 
@@ -44,26 +44,26 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) (err 
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: app.Config.Connectors.WebHook.TlsSkipVerify,
+				InsecureSkipVerify: wh.TlsSkipVerify,
 			},
 		},
 	}
 
 	// Create the request with the configured verb and URL
-	httpRequest, err := http.NewRequest(app.Config.Connectors.WebHook.Method, app.Config.Connectors.WebHook.URL, nil)
+	httpRequest, err := http.NewRequest(wh.Method, wh.URL, nil)
 	if err != nil {
 		return fmt.Errorf("error creating HTTP Request for webhook integration: %v", err)
 	}
 
 	// Add headers to the request if set
 	httpRequest.Header.Set("Content-Type", "application/json")
-	for headerKey, headerValue := range app.Config.Connectors.WebHook.Headers {
+	for headerKey, headerValue := range wh.Headers {
 		httpRequest.Header.Set(headerKey, headerValue)
 	}
 
 	// Add authentication if set for the webhook
-	if app.Config.Connectors.WebHook.Credentials.Username != "" && app.Config.Connectors.WebHook.Credentials.Password != "" {
-		httpRequest.SetBasicAuth(app.Config.Connectors.WebHook.Credentials.Username, app.Config.Connectors.WebHook.Credentials.Password)
+	if wh.Credentials.Username != "" && wh.Credentials.Password != "" {
+		httpRequest.SetBasicAuth(wh.Credentials.Username, wh.Credentials.Password)
 	}
 
 	// Parse jsonData to a map

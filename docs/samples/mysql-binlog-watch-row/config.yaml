@@ -81,23 +81,28 @@ connectors:
 
   routes:
     - events: ["insert", "update"]
-      connector: pubsub
+      connector: pubsub-test-add
       data: |
         {{- printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
     - events: ["delete"]
-      connector: pubsub
+      connector: pubsub-test-delete
       data: |
         {{- printf `{ "index": "test", "id": %v }` .data.id }}
 
   # PubSub connector configuration
   pubsub:
-    project_id: "test-project"
-    topic_id: "test-topic"
+    - name: pubsub-test-add
+      project_id: "test-project"
+      topic_id: "test-topic"
+    - name: pubsub-test-delete
+      project_id: "test-project"
+      topic_id: "test-topic"
 
   # Webhook connector configuration
   webhook:
-    tls_skip_verify: false
-    url: "https://webhook.site/d4a60a06-3559-41c1-b26c-f701fcebfe5c"
-    method: "POST"
-    headers:
-      X-BinWatch: "true"
+    - name: webhook-test
+      tls_skip_verify: false
+      url: "https://webhook.site/d4a60a06-3559-41c1-b26c-f701fcebfe5c"
+      method: "POST"
+      headers:
+        X-BinWatch: "true"

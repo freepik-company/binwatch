@@ -44,22 +44,26 @@ func executeConnectors(app *v1alpha1.Application, eventStr string, jsonData []by
 	// Execute the connectors based on the configuration routes
 	for _, connector := range app.Config.Connectors.Routes {
 		// Check webhook connector
-		if slices.Contains(connector.Events, event) && connector.Connector == "webhook" {
-			app.Logger.Debug("Sending data to webhook connector", zap.String("connector", connector.Connector),
-				zap.String("data", string(jsonData)), zap.String("event", event))
-			err = webhook.Send(app, connector.Data, jsonData)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("error sending data to webhook connector: %v", err))
+		if slices.Contains(connector.Events, event) {
+			for _, wh := range app.Config.Connectors.WebHook {
+				if wh.Name == connector.Connector {
+					app.Logger.Debug("Sending data to webhook connector", zap.String("connector", connector.Connector),
+						zap.String("data", string(jsonData)), zap.String("event", event))
+					err = webhook.Send(app, connector.Data, wh, jsonData)
+					if err != nil {
+						errs = append(errs, fmt.Errorf("error sending data to webhook connector %s: %v", connector.Connector, err))
+					}
+				}
 			}
-		}
-
-		// Check pubsub connector
-		if slices.Contains(connector.Events, event) && connector.Connector == "pubsub" {
-			app.Logger.Debug("Sending data to pubsub connector", zap.String("connector", connector.Connector),
-				zap.String("data", string(jsonData)), zap.String("event", event))
-			err = pubsub.Send(app, connector.Data, jsonData)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("error sending data to pubsub connector: %v", err))
+			for _, pb := range app.Config.Connectors.PubSub {
+				if pb.Name == connector.Connector {
+					app.Logger.Debug("Sending data to pubsub connector", zap.String("connector", connector.Connector),
+						zap.String("data", string(jsonData)), zap.String("event", event))
+					err = pubsub.Send(app, connector.Data, pb, jsonData)
+					if err != nil {
+						errs = append(errs, fmt.Errorf("error sending data to pubsub connector %s: %v", connector.Connector, err))
+					}
+				}
 			}
 		}
 	}

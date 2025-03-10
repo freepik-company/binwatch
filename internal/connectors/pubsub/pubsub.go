@@ -31,14 +31,14 @@ import (
 )
 
 // Send sends a message to a PubSub topic
-func Send(app *v1alpha1.Application, templateData string, jsonData []byte) (err error) {
+func Send(app *v1alpha1.Application, templateData string, pb v1alpha1.PubSubConfig, jsonData []byte) (err error) {
 
 	logger := app.Logger
 
 	logger.Debug("Sending message to pubsub", zap.String("data", string(jsonData)))
 
 	// Create the PubSub client
-	pubsubClient, err := pubsub.NewClient(app.Context, app.Config.Connectors.PubSub.ProjectID)
+	pubsubClient, err := pubsub.NewClient(app.Context, pb.ProjectID)
 	if err != nil {
 		return fmt.Errorf("error creating PubSub client: %v", err)
 	}
@@ -52,7 +52,7 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) (err 
 	}
 
 	// Get the topic
-	topic := pubsubClient.Topic(app.Config.Connectors.PubSub.TopicID)
+	topic := pubsubClient.Topic(pb.TopicID)
 
 	// Add row data to the template injected
 	templateInjectedObject := map[string]interface{}{}
@@ -75,8 +75,8 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) (err 
 		return fmt.Errorf("error publishing message to pubsub: %v", err)
 	}
 
-	logger.Debug("Message published to pubsub", zap.String("topic", app.Config.Connectors.PubSub.TopicID),
-		zap.String("project", app.Config.Connectors.PubSub.ProjectID), zap.String("id", id))
+	logger.Debug("Message published to pubsub", zap.String("topic", pb.TopicID),
+		zap.String("project", pb.ProjectID), zap.String("id", id))
 
 	return nil
 
