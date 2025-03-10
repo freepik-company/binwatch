@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package watch
+package sync
 
 import (
 	//
@@ -36,21 +36,21 @@ import (
 )
 
 const (
-	descriptionShort = `Start watching the MySQL binlog`
+	descriptionShort = `Dump and watch (sync) MySQL and send to Connectors`
 	descriptionLong  = `
-	Start watching the MySQL binlog and track changes that occur in database tables.
+	Dump and watch (sync) MySQL and send to Connectors for processing and storage.
 	`
 )
 
 // NewCommand TODO
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:                   "watch",
+		Use:                   "sync",
 		DisableFlagsInUseLine: true,
 		Short:                 descriptionShort,
 		Long:                  strings.ReplaceAll(descriptionLong, "\t", ""),
 
-		Run: WatchCommand,
+		Run: SyncCommand,
 	}
 
 	cmd.Flags().String("config", "config.yaml", "Path to the YAML config file")
@@ -58,17 +58,13 @@ func NewCommand() *cobra.Command {
 	return cmd
 }
 
-// WatchCommand TODO
-func WatchCommand(cmd *cobra.Command, args []string) {
+// SyncCommand TODO
+func SyncCommand(cmd *cobra.Command, args []string) {
 
 	// Configure application's context
 	app := v1alpha1.Application{
-		Config:           &v1alpha1.ConfigSpec{},
-		Context:          context.Background(),
-		BinLogPosition:   0,
-		BinLogFile:       "",
-		RollBackPosition: 0,
-		RollBackFile:     "",
+		Config:  &v1alpha1.ConfigSpec{},
+		Context: context.Background(),
 	}
 
 	// Check the flags for this command
@@ -113,10 +109,10 @@ func WatchCommand(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Run MySQL Watcher if MySQL config is present
+	// Run MySQL Sync if MySQL config is present
 	if !reflect.DeepEqual(app.Config.Sources.MySQL, v1alpha1.MySQLConfig{}) {
-		app.Logger.Info("Starting MySQL watcher")
-		mysql.Watcher(&app, hr)
+		app.Logger.Info("Starting MySQL dumper")
+		mysql.Sync(&app, hr)
 	} else {
 		app.Logger.Fatal("No connector configuration found")
 	}

@@ -30,4 +30,5 @@ type Application struct {
 	BinLogFile       string
 	RollBackPosition uint32
 	RollBackFile     string
+	RollbackNeeded   bool
 }

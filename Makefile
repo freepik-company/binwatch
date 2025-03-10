@@ -87,12 +87,36 @@ run-example:
 		CREATE DATABASE IF NOT EXISTS test; \
 		USE test; \
 		CREATE TABLE IF NOT EXISTS test (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100));"
-
-	@(HOSTNAME=127.0.0.1 PORT=8080 go run cmd/main.go watch --config docs/samples/mysql-binlog-watch-row/config.yaml & echo $$! > /tmp/go_pid.tmp)
-	@(HOSTNAME=localhost PORT=8081 go run cmd/main.go watch --config docs/samples/mysql-binlog-watch-row/config.yaml & echo $$! > /tmp/go_pid.tmp)
-
-	@sleep 6
 	@for i in $$(seq 1 20); do \
+		echo "INSERT new row $$i..."; \
+		docker exec -i mysql-binlog-watch-row mysql -uroot -pMiContrasenaSegura -e " \
+			USE test; \
+			INSERT INTO test (name) VALUES ('Dump_$$i');" ; \
+	done
+
+	@(HOSTNAME=127.0.0.1 PORT=8080 go run cmd/main.go sync --config ./docs/samples/mysql-binlog-watch-row/config.yaml & echo $$! > /tmp/go_pid.tmp)
+	@(HOSTNAME=localhost PORT=8081 go run cmd/main.go sync --config docs/samples/mysql-binlog-watch-row/config.yaml & echo $$! > /tmp/go_pid.tmp)
+
+	@sleep 5
+
+	@for i in $$(seq 1 20); do \
+		echo "INSERT new row $$i..."; \
+		docker exec -i mysql-binlog-watch-row mysql -uroot -pMiContrasenaSegura -e " \
+			USE test; \
+			INSERT INTO test (name) VALUES ('Example_$$i');" ; \
+		echo "UPDATE the row $$i..."; \
+		docker exec -i mysql-binlog-watch-row mysql -uroot -pMiContrasenaSegura -e " \
+			USE test; \
+			UPDATE test SET name='Modified_$$i' WHERE id=$$i;" ; \
+		echo "DELETE the row $$i..."; \
+		docker exec -i mysql-binlog-watch-row mysql -uroot -pMiContrasenaSegura -e " \
+			USE test; \
+			DELETE FROM test WHERE id=$$i;" ; \
+	done
+
+	ps aux | grep '[g]o-build' | grep './docs/' | cut -f2 -w | xargs -r kill -9 || true
+
+	@for i in $$(seq 21 40); do \
 		echo "INSERT new row $$i..."; \
 		docker exec -i mysql-binlog-watch-row mysql -uroot -pMiContrasenaSegura -e " \
 			USE test; \

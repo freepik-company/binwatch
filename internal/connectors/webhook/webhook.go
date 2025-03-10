@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -33,7 +34,7 @@ import (
 )
 
 // Send sends a message to a webhook
-func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
+func Send(app *v1alpha1.Application, templateData string, jsonData []byte) (err error) {
 
 	logger := app.Logger
 
@@ -51,8 +52,7 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 	// Create the request with the configured verb and URL
 	httpRequest, err := http.NewRequest(app.Config.Connectors.WebHook.Method, app.Config.Connectors.WebHook.URL, nil)
 	if err != nil {
-		logger.Error("Error creating HTTP Request for webhook integration", zap.Error(err))
-		return
+		return fmt.Errorf("error creating HTTP Request for webhook integration: %v", err)
 	}
 
 	// Add headers to the request if set
@@ -70,8 +70,7 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 	data := map[string]interface{}{}
 	err = json.Unmarshal(jsonData, &data)
 	if err != nil {
-		logger.Error("Error parsing JSON data for webhook integration", zap.Error(err))
-		return
+		return fmt.Errorf("error parsing JSON data for webhook integration: %v", err)
 	}
 
 	// Add row data to the template injected
@@ -81,8 +80,7 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 	// Evaluate the data template with the injected object
 	parsedMessage, err := template.EvaluateTemplate(templateData, templateInjectedObject)
 	if err != nil {
-		logger.Error("Error evaluating template for webhook integration", zap.Error(err))
-		return
+		return fmt.Errorf("error evaluating template for webhook integration: %v", err)
 	}
 
 	// Add data to the payload of the request
@@ -92,12 +90,12 @@ func Send(app *v1alpha1.Application, templateData string, jsonData []byte) {
 	// Send HTTP request to the webhook
 	httpResponse, err := httpClient.Do(httpRequest)
 	if err != nil {
-		logger.Error("Error sending HTTP request for webhook integration", zap.Error(err))
-		return
+		return fmt.Errorf("error sending HTTP request for webhook integration: %v", err)
 	}
 
 	defer httpResponse.Body.Close()
 
 	logger.Debug("Webhook sent successfully", zap.String("data", string(jsonData)))
 
+	return nil
 }
