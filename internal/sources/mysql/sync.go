@@ -26,6 +26,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"go.uber.org/zap"
 	"reflect"
+	"sync"
 	"time"
 )
 
@@ -43,12 +44,23 @@ var (
 	jsonData    []byte
 )
 
+type ConnectorsQueue struct {
+	mutex sync.RWMutex
+	queue []QueueItems
+}
+
+type QueueItems struct {
+	eventType string
+	data      []byte
+}
+
 // CanalEventHandler is a custom event handler for canal
 type CanalEventHandler struct {
 	canal.DummyEventHandler
-	app   *v1alpha1.Application
-	ring  *hashring.HashRing
-	canal *canal.Canal
+	app             *v1alpha1.Application
+	ring            *hashring.HashRing
+	canal           *canal.Canal
+	connectorsQueue *ConnectorsQueue
 }
 
 func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
@@ -112,6 +124,17 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 		}
 	}
 
+	// Initialize connectorsQueue and run workers for execute Connectors
+	connectorsQueue := &ConnectorsQueue{
+		queue: []QueueItems{},
+		mutex: sync.RWMutex{},
+	}
+
+	for i := 0; i < app.Config.MaxWorkers; i++ {
+		app.Logger.Debug(fmt.Sprintf("Starting worker with id: %d", i))
+		go executeConnectors(app, connectorsQueue)
+	}
+
 	// Create a new canal instance
 	c, err := canal.NewCanal(cfg)
 	if err != nil {
@@ -120,9 +143,10 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 
 	// Register a handler to handle canal events
 	c.SetEventHandler(&CanalEventHandler{
-		app:   app,
-		ring:  ring,
-		canal: c,
+		app:             app,
+		ring:            ring,
+		canal:           c,
+		connectorsQueue: connectorsQueue,
 	})
 
 	// Start canal loop to sync MySQL with rollback support
@@ -250,11 +274,13 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 		return fmt.Errorf("error processing row: %v", err)
 	}
 
-	// Send the JSON data to connectors
-	err = executeConnectors(h.app, e.Action, jsonData)
-	if err != nil {
-		h.app.Logger.Warn("Error executing connectors", zap.Error(err))
-	}
+	// Add data to the queue
+	h.connectorsQueue.mutex.Lock()
+	defer h.connectorsQueue.mutex.Unlock()
+	h.connectorsQueue.queue = append(h.connectorsQueue.queue, QueueItems{
+		eventType: e.Action,
+		data:      jsonData,
+	})
 
 	return nil
 

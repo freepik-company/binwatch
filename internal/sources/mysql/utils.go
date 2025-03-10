@@ -18,11 +18,11 @@ package mysql
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/go-mysql-org/go-mysql/canal"
 	"slices"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -34,47 +34,54 @@ import (
 )
 
 // executeConnectors function to execute the connectors based on the configuration
-func executeConnectors(app *v1alpha1.Application, eventStr string, jsonData []byte) (err error) {
-	// Use errors.Join to combine multiple errors
-	var errs []error
+// This function is intended to be run as a goroutine
+func executeConnectors(app *v1alpha1.Application, connectorsQueue *ConnectorsQueue) {
 
-	// Get the event
-	event := strings.ToLower(eventStr)
+	for {
 
-	// Execute the connectors based on the configuration routes
-	for _, connector := range app.Config.Connectors.Routes {
-		// Check webhook connector
-		if slices.Contains(connector.Events, event) {
-			for _, wh := range app.Config.Connectors.WebHook {
-				if wh.Name == connector.Connector {
-					app.Logger.Debug("Sending data to webhook connector", zap.String("connector", connector.Connector),
-						zap.String("data", string(jsonData)), zap.String("event", event))
-					err = webhook.Send(app, connector.Data, wh, jsonData)
-					if err != nil {
-						errs = append(errs, fmt.Errorf("error sending data to webhook connector %s: %v", connector.Connector, err))
+		if len(connectorsQueue.queue) == 0 {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		connectorsQueue.mutex.Lock()
+		eventStr := connectorsQueue.queue[0].eventType
+		data := connectorsQueue.queue[0].data
+		connectorsQueue.queue = connectorsQueue.queue[1:]
+		connectorsQueue.mutex.Unlock()
+
+		// Get the event
+		event := strings.ToLower(eventStr)
+
+		// Execute the connectors based on the configuration routes
+		for _, connector := range app.Config.Connectors.Routes {
+			// Check webhook connector
+			if slices.Contains(connector.Events, event) {
+				for _, wh := range app.Config.Connectors.WebHook {
+					if wh.Name == connector.Connector {
+						app.Logger.Debug("Sending data to webhook connector", zap.String("connector", connector.Connector),
+							zap.String("data", string(data)), zap.String("event", event))
+						err = webhook.Send(app, connector.Data, wh, data)
+						if err != nil {
+							app.Logger.Error(fmt.Sprintf("error sending data to webhook connector %s", connector.Connector), zap.Error(err))
+						}
 					}
 				}
-			}
-			for _, pb := range app.Config.Connectors.PubSub {
-				if pb.Name == connector.Connector {
-					app.Logger.Debug("Sending data to pubsub connector", zap.String("connector", connector.Connector),
-						zap.String("data", string(jsonData)), zap.String("event", event))
-					err = pubsub.Send(app, connector.Data, pb, jsonData)
-					if err != nil {
-						errs = append(errs, fmt.Errorf("error sending data to pubsub connector %s: %v", connector.Connector, err))
+				for _, pb := range app.Config.Connectors.PubSub {
+					if pb.Name == connector.Connector {
+						app.Logger.Debug("Sending data to pubsub connector", zap.String("connector", connector.Connector),
+							zap.String("data", string(data)), zap.String("event", event))
+						err = pubsub.Send(app, connector.Data, pb, data)
+						if err != nil {
+							app.Logger.Error(fmt.Sprintf("error sending data to pubsub connector %s", connector.Connector), zap.Error(err))
+						}
 					}
 				}
 			}
 		}
-	}
 
-	// If no errors occurred, return nil
-	if len(errs) == 0 {
-		return nil
+		time.Sleep(100 * time.Millisecond)
 	}
-
-	// Use errors.Join to combine all errors (Go 1.20+)
-	return errors.Join(errs...)
 }
 
 // getMinimalBinlogPosition function to get the minimal binlog position from the hashring

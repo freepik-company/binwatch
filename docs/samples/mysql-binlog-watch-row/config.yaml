@@ -13,6 +13,9 @@ logger:
 # It must have the format <hostname>:<port> or <ip>:<port> to be used in the hashring
 server_id: "$HOSTNAME:$PORT"
 
+
+max_workers: 10
+
 # Hashring configuration
 hashring:
 
@@ -88,7 +91,7 @@ connectors:
       data: |
         {{- printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
     - events: ["delete"]
-      connector: pubsub-test-delete
+      connector: webhook-test
       data: |
         {{- printf `{ "index": "test", "id": %v }` .data.id }}
 
@@ -105,7 +108,7 @@ connectors:
   webhook:
     - name: webhook-test
       tls_skip_verify: false
-      url: "https://webhook.site/d4a60a06-3559-41c1-b26c-f701fcebfe5c"
+      url: "https://webhook.site/0bc61d18-e306-44c7-a49c-ac6f6f64eb64"
       method: "POST"
       headers:
         X-BinWatch: "true"

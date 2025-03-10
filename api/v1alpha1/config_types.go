@@ -23,6 +23,7 @@ type ConfigSpec struct {
 	Connectors ConnectorsConfig `yaml:"connectors"`
 	Hashring   HashringConfig   `yaml:"hashring"`
 	ServerId   string           `yaml:"server_id"`
+	MaxWorkers int              `yaml:"max_workers"`
 }
 
 // HashringConfig

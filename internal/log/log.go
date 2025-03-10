@@ -70,9 +70,13 @@ func ConfigureLogger(app *v1alpha1.Application) (logger *zap.Logger, err error) 
 	if err != nil {
 		return logger, fmt.Errorf("error creating logger: %v", err)
 	}
+	defer logger.Sync()
 
 	// Add server name to logger
 	logger = logger.With(zap.String("server", app.Config.ServerId))
+
+	// Enable with caller
+	logger = logger.WithOptions(zap.AddCaller())
 
 	return logger, err
 }
