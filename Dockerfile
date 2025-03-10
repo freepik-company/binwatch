@@ -5,8 +5,7 @@ RUN go mod download
 COPY . .
 RUN go build -o /app/binwatch cmd/main.go
 
-FROM alpine:3.18
-RUN apk --no-cache add ca-certificates bash mysql-client
+FROM mysql:8.0
 WORKDIR /app
 COPY --from=builder /app/binwatch /app/
 COPY docs/samples/config-sample.yaml /app/config.yaml

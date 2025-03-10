@@ -107,6 +107,7 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 		app.BinLogFile = DumpStep
 		cfg.Dump.SkipMasterData = true
 		if len(app.Config.Sources.MySQL.DumpConfig.MySQLDumpExtraOptions) > 0 {
+			app.Logger.Debug(fmt.Sprintf("Extra options for mysqldump: %v", app.Config.Sources.MySQL.DumpConfig.MySQLDumpExtraOptions))
 			cfg.Dump.ExtraOptions = app.Config.Sources.MySQL.DumpConfig.MySQLDumpExtraOptions
 		}
 	}
