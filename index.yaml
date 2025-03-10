@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   binwatch:
   - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2025-03-10T07:55:52.107952918Z"
+    description: BinWatch Helm chart for Kubernetes
+    digest: 72ec93c35016759fdab98e3542b413564eaab223397bd4dc0cd8133095994cb2
+    name: binwatch
+    type: application
+    urls:
+    - binwatch-0.1.0.tgz
+    version: 0.1.0
+  - apiVersion: v2
     appVersion: 0.0.1
     created: "2025-03-07T16:57:35.640639745Z"
     description: BinWatch Helm chart for Kubernetes
@@ -11,4 +21,4 @@ entries:
     urls:
     - binwatch-0.0.1.tgz
     version: 0.0.1
-generated: "2025-03-07T16:57:35.640650375Z"
+generated: "2025-03-10T07:55:52.107961745Z"
