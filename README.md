@@ -99,6 +99,10 @@ sources:
         - test
       tables:
         - test
+      # Extra options for mysqldump command
+      # Recommended --single-transaction to avoid blocking the database
+      # mysqldump_extra_options:
+      #   - "--single-transaction"
       # Default value is /usr/bin/mysqldump, path where mysqldump is located in the Docker image
       mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
 

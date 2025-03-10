@@ -106,6 +106,9 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 		// Set BinLogFile with the dump step.
 		app.BinLogFile = DumpStep
 		cfg.Dump.SkipMasterData = true
+		if len(app.Config.Sources.MySQL.DumpConfig.MySQLDumpExtraOptions) > 0 {
+			cfg.Dump.ExtraOptions = app.Config.Sources.MySQL.DumpConfig.MySQLDumpExtraOptions
+		}
 	}
 
 	// Create a new canal instance

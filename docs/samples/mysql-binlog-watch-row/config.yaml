@@ -73,6 +73,9 @@ sources:
         - test
       tables:
         - test
+      # Extra options for mysqldump command
+      mysqldump_extra_options:
+        - "--single-transaction"
       mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
 
 # Data connectors configuration

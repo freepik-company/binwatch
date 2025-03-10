@@ -72,9 +72,10 @@ type MySQLConfig struct {
 
 // DumpConfig
 type DumpConfig struct {
-	Databases        []string `yaml:"databases"`
-	Tables           []string `yaml:"tables"`
-	MySQLDumpBinPath string   `yaml:"mysqldump_bin_path"`
+	MySQLDumpExtraOptions []string `yaml:"mysqldump_extra_options"`
+	Databases             []string `yaml:"databases"`
+	Tables                []string `yaml:"tables"`
+	MySQLDumpBinPath      string   `yaml:"mysqldump_bin_path"`
 }
 
 // FilterTable
