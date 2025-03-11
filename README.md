@@ -38,6 +38,9 @@ logger:
 # It must have the format <hostname>:<port> or <ip>:<port> to be used in the hashring
 server_id: "$HOSTNAME:8080"
 
+# Number of workers to process the events
+max_workers: 10
+
 # Hashring configuration for HA and load balancing purposes
 hashring:
 
@@ -272,6 +275,8 @@ configMap:
       
       server_id: "$POD_IP:8080"
         
+      max_workers: 10
+  
       hashring:
         sync_worker_time_ms: 300
         api_port: 8080

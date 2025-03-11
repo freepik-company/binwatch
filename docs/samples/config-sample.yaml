@@ -17,6 +17,9 @@ logger:
 # It must have the format <hostname>:<port> or <ip>:<port> to be used in the hashring
 server_id: "$HOSTNAME:$PORT"
 
+# Number of workers to process the events
+max_workers: 10
+
 # Hashring configuration for HA and load balancing purposes
 # hashring:
 

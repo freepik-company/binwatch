@@ -5,7 +5,9 @@ RUN go mod download
 COPY . .
 RUN go build -o /app/binwatch cmd/main.go
 
-FROM mysql:8.0
+# Needed mysqldump 8.0.31 image, so do not executes FLUSH TABLES at
+# the beggining of the dump which is locking the tables
+FROM mysql:8.0.31
 WORKDIR /app
 COPY --from=builder /app/binwatch /app/
 COPY docs/samples/config-sample.yaml /app/config.yaml

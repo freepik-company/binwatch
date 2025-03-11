@@ -17,17 +17,22 @@ limitations under the License.
 package mysql
 
 import (
-	"binwatch/api/v1alpha1"
-	"binwatch/internal/hashring"
+	//
 	"errors"
 	"fmt"
+	"reflect"
+	"sync"
+	"time"
+
+	//
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"go.uber.org/zap"
-	"reflect"
-	"sync"
-	"time"
+
+	//
+	"binwatch/api/v1alpha1"
+	"binwatch/internal/hashring"
 )
 
 const (
@@ -63,6 +68,7 @@ type CanalEventHandler struct {
 	connectorsQueue *ConnectorsQueue
 }
 
+// Sync function to sync MySQL with the hashring support
 func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 	cfg := &canal.Config{
 		ServerID:        app.Config.Sources.MySQL.ServerID,
@@ -127,7 +133,6 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 	// Initialize connectorsQueue and run workers for execute Connectors
 	connectorsQueue := &ConnectorsQueue{
 		queue: []QueueItems{},
-		mutex: sync.RWMutex{},
 	}
 
 	for i := 0; i < app.Config.MaxWorkers; i++ {
