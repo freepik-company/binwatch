@@ -7,6 +7,8 @@
 BinWatch is a tool designed to subscribe to a MySQL database's binlog and track changes that occur in database tables. 
 These changes are processed and sent to supported connectors in real-time.
 
+<img src="https://raw.githubusercontent.com/freepik-company/binwatch/master/docs/img/flow.png" alt="BinWatch (Main) Flow." width="800">
+
 ## Motivation
 The motivation behind this tool stems from the need for a system that allows simple, real-time tracking of changes in
 a MySQL database without requiring complex external tools that might complicate the process.
@@ -41,11 +43,24 @@ server_id: "$HOSTNAME:8080"
 # Number of workers to process the events
 max_workers: 10
 
+# Flow control configuration to control the memory usage by the event connectors queue
+flow_control:
+  # Check interval to check the queue size
+  check_interval: 100ms
+  # List of thresholds to control the sleep time of the workers to avoid memory overflow
+  thresholds:
+    - queue_size: 1
+      sleep_time: 10ms
+    - queue_size: 10
+      sleep_time: 100ms
+    - queue_size: 100
+      sleep_time: 1s
+      
 # Hashring configuration for HA and load balancing purposes
 hashring:
 
-  # Sync worker time in milliseconds to sync the ring nodes when a new node is added or removed from the ring
-  sync_worker_time_ms: 300
+  # Sync worker time to sync the ring nodes when a new node is added or removed from the ring
+  sync_worker_time: 300ms
   
   # API port to expose the hashring API and health check
   api_port: 8080
@@ -77,17 +92,14 @@ sources:
     # Server ID must be unique across all MySQL servers
     server_id: 100
 
-    # Read timeout in seconds
-    read_timeout: 90
+    # Read timeout
+    read_timeout: 90s
 
-    # Heartbeat period in seconds
-    heartbeat_period: 60
+    # Heartbeat period
+    heartbeat_period: 60s
 
     # Flavor of the database. MySQL or MariaDB
     flavor: mysql
-
-    # Timeout for syncing the events in milliseconds
-    sync_timeout_ms: 200
 
     # Just listen for events in these database-table pairs
     filter_tables:
@@ -117,6 +129,7 @@ connectors:
   # the data format that will be sent to the connector.
   # Events can be insert, update or delete
   # Data format is in golang template format. The data read from the binlog will be passed to the template as .data
+  # IMPORTANT: This part of configuration does not allow environment variables!!
   routes:
     - events: ["insert", "update"]
       connector: pubsub-add
@@ -276,9 +289,19 @@ configMap:
       server_id: "$POD_IP:8080"
         
       max_workers: 10
-  
+
+      flow_control:
+        check_interval: 1s
+        thresholds:
+          - queue_size: 100
+            sleep_time: 10ms
+          - queue_size: 1000
+            sleep_time: 100ms
+          - queue_size: 10000
+            sleep_time: 1s
+      
       hashring:
-        sync_worker_time_ms: 300
+        sync_worker_time: 300ms
         api_port: 8080
         dns_ring_discovery:
           domain: "binwatch-headless.binwatch.svc.cluster.local"
@@ -291,10 +314,9 @@ configMap:
           user: "$MYSQL_USER"
           password: "$MYSQL_PASSWORD"
           server_id: 100
-          read_timeout: 90
-          heartbeat_period: 60
+          read_timeout: 90s
+          heartbeat_period: 60s
           flavor: mysql
-          sync_timeout_ms: 200
           filter_tables:
             - database: test
               table: test    

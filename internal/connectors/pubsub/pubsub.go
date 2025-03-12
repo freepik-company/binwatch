@@ -20,7 +20,6 @@ import (
 	//
 	"encoding/json"
 	"fmt"
-
 	//
 	"cloud.google.com/go/pubsub"
 	"go.uber.org/zap"
@@ -37,13 +36,6 @@ func Send(app *v1alpha1.Application, templateData string, pb v1alpha1.PubSubConf
 
 	logger.Debug("Sending message to pubsub", zap.String("data", string(jsonData)))
 
-	// Create the PubSub client
-	pubsubClient, err := pubsub.NewClient(app.Context, pb.ProjectID)
-	if err != nil {
-		return fmt.Errorf("error creating PubSub client: %v", err)
-	}
-	defer pubsubClient.Close()
-
 	// Parse jsonData to a map
 	data := map[string]interface{}{}
 	err = json.Unmarshal(jsonData, &data)
@@ -52,7 +44,7 @@ func Send(app *v1alpha1.Application, templateData string, pb v1alpha1.PubSubConf
 	}
 
 	// Get the topic
-	topic := pubsubClient.Topic(pb.TopicID)
+	topic := app.PubsubClient[pb.Name].Topic(pb.TopicID)
 
 	// Add row data to the template injected
 	templateInjectedObject := map[string]interface{}{}

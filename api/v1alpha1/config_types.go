@@ -18,18 +18,31 @@ package v1alpha1
 
 // ConfigSpec
 type ConfigSpec struct {
-	Logger     LoggerConfig     `yaml:"logger"`
-	Sources    SourcesConfig    `yaml:"sources"`
-	Connectors ConnectorsConfig `yaml:"connectors"`
-	Hashring   HashringConfig   `yaml:"hashring"`
-	ServerId   string           `yaml:"server_id"`
-	MaxWorkers int              `yaml:"max_workers"`
+	Logger      LoggerConfig     `yaml:"logger"`
+	Sources     SourcesConfig    `yaml:"sources"`
+	Connectors  ConnectorsConfig `yaml:"connectors"`
+	Hashring    HashringConfig   `yaml:"hashring"`
+	ServerId    string           `yaml:"server_id"`
+	MaxWorkers  string           `yaml:"max_workers"`
+	FlowControl FlowControl      `yaml:"flow_control"`
+}
+
+// FlowControl
+type FlowControl struct {
+	Thresholds    []Thresholds `yaml:"thresholds"`
+	CheckInterval string       `yaml:"check_interval"`
+}
+
+// Thresholds
+type Thresholds struct {
+	QueueSize int    `yaml:"queue_size"`
+	SleepTime string `yaml:"sleep_time"`
 }
 
 // HashringConfig
 type HashringConfig struct {
-	SyncWorkerTimeMs    int                    `yaml:"sync_worker_time_ms"`
-	APIPort             int                    `yaml:"api_port"`
+	SyncWorkerTime      string                 `yaml:"sync_worker_time"`
+	APIPort             string                 `yaml:"api_port"`
 	DnsRingDiscovery    DnsDiscoveryRingConfig `yaml:"dns_ring_discovery"`
 	StaticRingDiscovery StaticRingConfig       `yaml:"static_ring_discovery"`
 }
@@ -42,7 +55,7 @@ type StaticRingConfig struct {
 // DnsDiscoveryConfig
 type DnsDiscoveryRingConfig struct {
 	Domain string `yaml:"domain"`
-	Port   int    `yaml:"port"`
+	Port   string `yaml:"port"`
 }
 
 // LoggerConfig
@@ -58,15 +71,14 @@ type SourcesConfig struct {
 
 // MySQLConfig
 type MySQLConfig struct {
-	SyncTimeoutMs   int           `yaml:"sync_timeout_ms"`
 	Host            string        `yaml:"host"`
-	Port            uint16        `yaml:"port"`
+	Port            string        `yaml:"port"`
 	User            string        `yaml:"user"`
 	Password        string        `yaml:"password"`
-	ServerID        uint32        `yaml:"server_id"`
+	ServerID        string        `yaml:"server_id"`
 	Flavor          string        `yaml:"flavor"`
-	ReadTimeout     int           `yaml:"read_timeout"`
-	HeartbeatPeriod int           `yaml:"heartbeat_period"`
+	ReadTimeout     string        `yaml:"read_timeout"`
+	HeartbeatPeriod string        `yaml:"heartbeat_period"`
 	FilterTables    []FilterTable `yaml:"filter_tables"`
 	DumpConfig      DumpConfig    `yaml:"dump_config"`
 }

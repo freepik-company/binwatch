@@ -36,51 +36,61 @@ import (
 // executeConnectors function to execute the connectors based on the configuration
 // This function is intended to be run as a goroutine
 func executeConnectors(app *v1alpha1.Application, connectorsQueue *ConnectorsQueue) {
-
 	for {
+		var eventStr string
+		var data []byte
 
-		if len(connectorsQueue.queue) == 0 {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-
+		// Safely extract an item from the queue
 		connectorsQueue.mutex.Lock()
-		eventStr := connectorsQueue.queue[0].eventType
-		data := connectorsQueue.queue[0].data
-		connectorsQueue.queue = connectorsQueue.queue[1:]
-		connectorsQueue.mutex.Unlock()
+		if len(connectorsQueue.queue) > 0 {
+			app.Logger.Debug(fmt.Sprintf("Connectors Queue size: %d", len(connectorsQueue.queue)))
+			eventStr = connectorsQueue.queue[0].eventType
+			data = connectorsQueue.queue[0].data
+			connectorsQueue.queue = connectorsQueue.queue[1:]
+			connectorsQueue.mutex.Unlock()
 
-		// Get the event
-		event := strings.ToLower(eventStr)
+			// Convert event to lowercase
+			event := strings.ToLower(eventStr)
 
-		// Execute the connectors based on the configuration routes
-		for _, connector := range app.Config.Connectors.Routes {
-			// Check webhook connector
-			if slices.Contains(connector.Events, event) {
-				for _, wh := range app.Config.Connectors.WebHook {
-					if wh.Name == connector.Connector {
-						app.Logger.Debug("Sending data to webhook connector", zap.String("connector", connector.Connector),
-							zap.String("data", string(data)), zap.String("event", event))
-						err = webhook.Send(app, connector.Data, wh, data)
-						if err != nil {
-							app.Logger.Error(fmt.Sprintf("error sending data to webhook connector %s", connector.Connector), zap.Error(err))
+			// Execute connectors outside the lock
+			for _, connector := range app.Config.Connectors.Routes {
+				// Check if connector handles this event
+				if slices.Contains(connector.Events, event) {
+					// Process webhooks
+					for _, wh := range app.Config.Connectors.WebHook {
+						if wh.Name == connector.Connector {
+							app.Logger.Debug("Sending data to webhook connector",
+								zap.String("connector", connector.Connector),
+								zap.String("data", string(data)),
+								zap.String("event", event))
+							err := webhook.Send(app, connector.Data, wh, data)
+							if err != nil {
+								app.Logger.Error(fmt.Sprintf("error sending data to webhook connector %s", connector.Connector),
+									zap.Error(err))
+							}
 						}
 					}
-				}
-				for _, pb := range app.Config.Connectors.PubSub {
-					if pb.Name == connector.Connector {
-						app.Logger.Debug("Sending data to pubsub connector", zap.String("connector", connector.Connector),
-							zap.String("data", string(data)), zap.String("event", event))
-						err = pubsub.Send(app, connector.Data, pb, data)
-						if err != nil {
-							app.Logger.Error(fmt.Sprintf("error sending data to pubsub connector %s", connector.Connector), zap.Error(err))
+
+					// Process pubsub
+					for _, pb := range app.Config.Connectors.PubSub {
+						if pb.Name == connector.Connector {
+							app.Logger.Debug("Sending data to pubsub connector",
+								zap.String("connector", connector.Connector),
+								zap.String("data", string(data)),
+								zap.String("event", event))
+							err := pubsub.Send(app, connector.Data, pb, data)
+							if err != nil {
+								app.Logger.Error(fmt.Sprintf("error sending data to pubsub connector %s", connector.Connector),
+									zap.Error(err))
+							}
 						}
 					}
 				}
 			}
+		} else {
+			connectorsQueue.mutex.Unlock()
+			time.Sleep(10 * time.Millisecond)
 		}
-
-		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -186,4 +196,31 @@ func watchEvent(app *v1alpha1.Application, ev *canal.RowsEvent) bool {
 	}
 
 	return false
+}
+
+// calculateSleepTime function to calculate the sleep time between events in base of the queue size
+func calculateSleepTime(app *v1alpha1.Application, connectorsQueue *ConnectorsQueue) {
+	if len(app.Config.FlowControl.Thresholds) > 0 {
+		for {
+			sleepTime := time.Duration(0)
+			queueSize := len(connectorsQueue.queue)
+			for _, flowControl := range app.Config.FlowControl.Thresholds {
+				if queueSize >= flowControl.QueueSize {
+					sleepTime, err = time.ParseDuration(flowControl.SleepTime)
+					if err != nil {
+						app.Logger.Error("Error parsing sleep time", zap.Error(err))
+					}
+				}
+			}
+			if sleepTime != 0 {
+				app.Logger.Warn(fmt.Sprintf("Too many elements in queue %d, sleeping %v seconds between events", queueSize, sleepTime))
+			}
+			app.SleepTime = sleepTime
+			checkInterval, err := time.ParseDuration(app.Config.FlowControl.CheckInterval)
+			if err != nil {
+				app.Logger.Error("Error parsing check interval", zap.Error(err))
+			}
+			time.Sleep(checkInterval)
+		}
+	}
 }

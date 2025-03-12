@@ -21,10 +21,12 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync"
 	"time"
 
 	//
+	"cloud.google.com/go/pubsub"
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -47,6 +49,10 @@ var (
 	binLogPos   uint32
 	binLogFile  string
 	jsonData    []byte
+	// Initialize connectorsQueue and run workers for execute Connectors
+	connectorsQueue = &ConnectorsQueue{
+		queue: []QueueItems{},
+	}
 )
 
 type ConnectorsQueue struct {
@@ -70,14 +76,29 @@ type CanalEventHandler struct {
 
 // Sync function to sync MySQL with the hashring support
 func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
+
+	// Parse durations
+	readTimeout, err := time.ParseDuration(app.Config.Sources.MySQL.ReadTimeout)
+	if err != nil {
+		app.Logger.Fatal("Error parsing read timeout", zap.Error(err))
+	}
+	heathbeatPeriod, err := time.ParseDuration(app.Config.Sources.MySQL.HeartbeatPeriod)
+	if err != nil {
+		app.Logger.Fatal("Error parsing heartbeat period", zap.Error(err))
+	}
+	serverId, err := strconv.ParseUint(app.Config.Sources.MySQL.ServerID, 10, 32)
+	if err != nil {
+		app.Logger.Fatal("Error parsing server ID", zap.Error(err))
+	}
+
 	cfg := &canal.Config{
-		ServerID:        app.Config.Sources.MySQL.ServerID,
+		ServerID:        uint32(serverId),
 		Flavor:          app.Config.Sources.MySQL.Flavor,
-		Addr:            fmt.Sprintf("%s:%d", app.Config.Sources.MySQL.Host, app.Config.Sources.MySQL.Port),
+		Addr:            fmt.Sprintf("%s:%s", app.Config.Sources.MySQL.Host, app.Config.Sources.MySQL.Port),
 		User:            app.Config.Sources.MySQL.User,
 		Password:        app.Config.Sources.MySQL.Password,
-		ReadTimeout:     time.Duration(app.Config.Sources.MySQL.ReadTimeout) * time.Second,
-		HeartbeatPeriod: time.Duration(app.Config.Sources.MySQL.HeartbeatPeriod) * time.Second,
+		ReadTimeout:     readTimeout,
+		HeartbeatPeriod: heathbeatPeriod,
 	}
 
 	// If hashring is configured, check if there are servers running with the position of the binlog
@@ -130,15 +151,32 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 		}
 	}
 
-	// Initialize connectorsQueue and run workers for execute Connectors
-	connectorsQueue := &ConnectorsQueue{
-		queue: []QueueItems{},
+	// Create pubsub clients if the configuration is present, to avoid creating a client for each event
+	if !reflect.ValueOf(app.Config.Connectors.PubSub).IsZero() {
+		app.PubsubClient = make(map[string]*pubsub.Client)
+		for _, pubsubConfig := range app.Config.Connectors.PubSub {
+			app.PubsubClient[pubsubConfig.Name], err = pubsub.NewClient(app.Context, pubsubConfig.ProjectID)
+			if err != nil {
+				app.Logger.Fatal(fmt.Sprintf("Error creating pubsub client for %s project ID.", pubsubConfig.ProjectID), zap.Error(err))
+			}
+		}
 	}
 
-	for i := 0; i < app.Config.MaxWorkers; i++ {
+	// Start connector workers to run in background listening to the queue
+	maxWorkers := 1
+	if app.Config.MaxWorkers != "" {
+		maxWorkers, err = strconv.Atoi(app.Config.MaxWorkers)
+		if err != nil {
+			app.Logger.Fatal("Error parsing max workers", zap.Error(err))
+		}
+	}
+	for i := 0; i < maxWorkers; i++ {
 		app.Logger.Debug(fmt.Sprintf("Starting worker with id: %d", i))
 		go executeConnectors(app, connectorsQueue)
 	}
+
+	// goroutine for calculate sleep time between events
+	go calculateSleepTime(app, connectorsQueue)
 
 	// Create a new canal instance
 	c, err := canal.NewCanal(cfg)
@@ -188,9 +226,10 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 
 			// Register a handler to handle canal events to the new canal
 			c.SetEventHandler(&CanalEventHandler{
-				app:   app,
-				ring:  ring,
-				canal: c,
+				app:             app,
+				ring:            ring,
+				canal:           c,
+				connectorsQueue: connectorsQueue,
 			})
 
 			// If rollback is requested during the DumpStep process, set the rollback position and file
@@ -286,6 +325,12 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 		eventType: e.Action,
 		data:      jsonData,
 	})
+
+	// Calculate conenctorsQueue size and sleep time if needed
+	queueSize := len(h.connectorsQueue.queue)
+	h.app.Logger.Debug(fmt.Sprintf("Queue size: %d", queueSize))
+
+	time.Sleep(h.app.SleepTime)
 
 	return nil
 

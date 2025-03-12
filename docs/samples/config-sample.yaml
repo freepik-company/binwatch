@@ -20,6 +20,19 @@ server_id: "$HOSTNAME:$PORT"
 # Number of workers to process the events
 max_workers: 10
 
+# Flow control configuration to control the memory usage by the event connectors queue
+flow_control:
+  # Check interval to check the queue size
+  check_interval: 100ms
+  # List of thresholds to control the sleep time of the workers to avoid memory overflow
+  thresholds:
+    - queue_size: 1
+      sleep_time: 10ms
+    - queue_size: 10
+      sleep_time: 100ms
+    - queue_size: 100
+      sleep_time: 1s
+      
 # Hashring configuration for HA and load balancing purposes
 # hashring:
 
@@ -56,17 +69,14 @@ sources:
     # Server ID must be unique across all MySQL servers
     server_id: 100
 
-    # Read timeout in seconds
-    read_timeout: 90
+    # Read timeout
+    read_timeout: 90s
 
-    # Heartbeat period in seconds
-    heartbeat_period: 60
+    # Heartbeat period
+    heartbeat_period: 60s
 
     # Flavor of the database. MySQL or MariaDB
     flavor: mysql
-
-    # Timeout for syincing the events in milliseconds
-    sync_timeout_ms: 200
 
     # Just listen for events in this database-table pairs
     filter_tables:

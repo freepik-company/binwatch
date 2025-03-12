@@ -42,7 +42,7 @@ func (h *HashRing) runHashRingAPI(app *v1alpha1.Application) {
 
 	// Start the server
 	go func() {
-		err := http.ListenAndServe(fmt.Sprintf(":%d", app.Config.Hashring.APIPort), nil)
+		err := http.ListenAndServe(fmt.Sprintf(":%s", app.Config.Hashring.APIPort), nil)
 		if err != nil {
 			app.Logger.Fatal("Error starting hashring API server", zap.Error(err))
 		}

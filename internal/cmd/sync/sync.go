@@ -19,6 +19,7 @@ package sync
 import (
 	//
 	"context"
+	"go.uber.org/zap"
 	coreLog "log"
 	"reflect"
 	"strings"
@@ -96,7 +97,13 @@ func SyncCommand(cmd *cobra.Command, args []string) {
 
 	// Try to add server to the Hashring
 	hr := hashring.NewHashRing(1000)
-	go hr.SyncWorker(&app, time.Duration(app.Config.Hashring.SyncWorkerTimeMs)*time.Millisecond)
+	// Parse duration
+	syncTime, err := time.ParseDuration(app.Config.Hashring.SyncWorkerTime)
+	if err != nil {
+		app.Logger.Fatal("Error parsing duration", zap.Error(err))
+	}
+
+	go hr.SyncWorker(&app, syncTime)
 
 	// If hashring is present, wait for the server list to be populated, any other case continue
 	if !reflect.ValueOf(app.Config.Hashring).IsZero() {

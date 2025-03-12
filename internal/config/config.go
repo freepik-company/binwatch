@@ -20,12 +20,15 @@ import (
 	"gopkg.in/yaml.v3"
 	"os"
 
+	//
 	"binwatch/api/v1alpha1"
 )
 
 // ReadFile TODO
 func ReadFile(filepath string) (config v1alpha1.ConfigSpec, err error) {
 	var fileBytes []byte
+	var originalConfig = config
+
 	fileBytes, err = os.ReadFile(filepath)
 	if err != nil {
 		return config, err
@@ -36,6 +39,17 @@ func ReadFile(filepath string) (config v1alpha1.ConfigSpec, err error) {
 	fileExpandedEnv := os.ExpandEnv(string(fileBytes))
 
 	err = yaml.Unmarshal([]byte(fileExpandedEnv), &config)
+	if err != nil {
+		return config, err
+	}
+
+	err = yaml.Unmarshal(fileBytes, &originalConfig)
+	if err != nil {
+		return config, err
+	}
+
+	// Restore original values for Routes, as they are not expanded
+	config.Connectors.Routes = originalConfig.Connectors.Routes
 
 	return config, err
 }

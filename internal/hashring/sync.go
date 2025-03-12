@@ -76,7 +76,7 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 			}
 
 			for _, discoveredIp := range discoveredIps {
-				tmpHostPool = append(tmpHostPool, fmt.Sprintf("%s:%d", discoveredIp.String(), app.Config.Hashring.DnsRingDiscovery.Port))
+				tmpHostPool = append(tmpHostPool, fmt.Sprintf("%s:%s", discoveredIp.String(), app.Config.Hashring.DnsRingDiscovery.Port))
 			}
 		}
 

@@ -17,8 +17,10 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"cloud.google.com/go/pubsub"
 	"context"
 	"go.uber.org/zap"
+	"time"
 )
 
 // Application TODO
@@ -31,4 +33,8 @@ type Application struct {
 	RollBackPosition uint32
 	RollBackFile     string
 	RollbackNeeded   bool
+
+	// Carried stuff
+	PubsubClient map[string]*pubsub.Client
+	SleepTime    time.Duration
 }
