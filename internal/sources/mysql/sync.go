@@ -103,8 +103,26 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 
 	// If hashring is configured, check if there are servers running with the position of the binlog
 	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
+
 		// Get minimal binlog position from all servers
 		binLogPos, binLogFile, err = getMinimalBinlogPosition(app, ring)
+
+		// If set, get start_position from the config file. If it is lower than the minimal position from the servers, use it.
+		if !reflect.ValueOf(app.Config.Sources.MySQL.StartPosition).IsZero() {
+			startLogPos := app.Config.Sources.MySQL.StartPosition.Position
+			startLogFile := app.Config.Sources.MySQL.StartPosition.File
+			if startLogPos != 0 && startLogFile != "" ||
+				startLogFile != binLogFile && startLogFile == "mysqldump" ||
+				startLogFile == binLogFile && startLogPos > binLogPos {
+				if startLogFile > binLogFile {
+					app.Logger.Info(fmt.Sprintf("Starting reading from start position %s/%v", startLogFile, startLogPos))
+					binLogFile = startLogFile
+					binLogPos = startLogPos
+				} else {
+					app.Logger.Info(fmt.Sprintf("Starting reading from last known position %s/%v", binLogFile, binLogPos))
+				}
+			}
+		}
 
 		// If sync process is still during the DumpStep, use RollbackFile and RollbackPosition variables
 		if binLogFile == DumpStep {

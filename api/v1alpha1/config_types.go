@@ -81,6 +81,13 @@ type MySQLConfig struct {
 	HeartbeatPeriod string        `yaml:"heartbeat_period"`
 	FilterTables    []FilterTable `yaml:"filter_tables"`
 	DumpConfig      DumpConfig    `yaml:"dump_config"`
+	StartPosition   StartPosition `yaml:"start_position"`
+}
+
+// StartPosition
+type StartPosition struct {
+	File     string `yaml:"file"`
+	Position uint32 `yaml:"position"`
 }
 
 // DumpConfig

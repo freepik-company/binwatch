@@ -78,6 +78,13 @@ sources:
       - database: test
         table: test
 
+    # Start binlog position if you want to start reading from a specific position of binlog or mysqldump
+    # Set file mysqldump if you want to start from a specific position in the mysqldump.
+    # NOTE: mysqldump dumps in order of the primary key
+    start_position:
+      file: mysqldump
+      position: 4
+
     # Mysqldump configuration for sync command. Just can dump an entire database, many databases or many tables for ONE database.
     # If many databases are specefied with tables, the tables will be ignored.
     # Empty dump_config disables the previous mysql dump feature.
