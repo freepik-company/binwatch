@@ -43,12 +43,14 @@ const (
 )
 
 var (
-	ErrRollback = errors.New("rollback requested")
-	rollbackPos = mysql.Position{}
-	err         error
-	binLogPos   uint32
-	binLogFile  string
-	jsonData    []byte
+	ErrRollback  = errors.New("rollback requested")
+	rollbackPos  = mysql.Position{}
+	err          error
+	binLogPos    uint32
+	binLogFile   string
+	jsonData     []byte
+	startLogPos  uint32
+	startLogFile string
 	// Initialize connectorsQueue and run workers for execute Connectors
 	connectorsQueue = &ConnectorsQueue{
 		queue: []QueueItems{},
@@ -101,40 +103,57 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 		HeartbeatPeriod: heathbeatPeriod,
 	}
 
+	// If set, get start_position from the config file. If it is lower than the minimal position from the servers, use it.
+	if !reflect.ValueOf(app.Config.Sources.MySQL.StartPosition).IsZero() {
+		startLogPos = app.Config.Sources.MySQL.StartPosition.Position
+		startLogFile = app.Config.Sources.MySQL.StartPosition.File
+		app.Logger.Info(fmt.Sprintf("Start position configured in %s/%v", startLogFile, startLogPos))
+	}
+
 	// If hashring is configured, check if there are servers running with the position of the binlog
 	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
 
 		// Get minimal binlog position from all servers
 		binLogPos, binLogFile, err = getMinimalBinlogPosition(app, ring)
+		if err != nil {
+			app.Logger.Fatal("Error getting minimal binlog position", zap.Error(err))
+		}
 
 		// If set, get start_position from the config file. If it is lower than the minimal position from the servers, use it.
-		if !reflect.ValueOf(app.Config.Sources.MySQL.StartPosition).IsZero() {
-			startLogPos := app.Config.Sources.MySQL.StartPosition.Position
-			startLogFile := app.Config.Sources.MySQL.StartPosition.File
-			if startLogPos != 0 && startLogFile != "" ||
-				startLogFile != binLogFile && startLogFile == "mysqldump" ||
-				startLogFile == binLogFile && startLogPos > binLogPos {
-				if startLogFile > binLogFile {
-					app.Logger.Info(fmt.Sprintf("Starting reading from start position %s/%v", startLogFile, startLogPos))
-					binLogFile = startLogFile
-					binLogPos = startLogPos
-				} else {
-					app.Logger.Info(fmt.Sprintf("Starting reading from last known position %s/%v", binLogFile, binLogPos))
+		if binLogFile != "" && binLogPos == 0 {
+			if startLogPos != 0 && startLogFile != "" {
+				if binLogFile == startLogFile && startLogFile == DumpStep {
+					if startLogPos < binLogPos {
+						startLogPos = binLogPos
+					}
 				}
+				if binLogFile != startLogFile && startLogFile == DumpStep {
+					startLogFile = binLogFile
+					startLogPos = binLogPos
+				}
+
+				if binLogFile > startLogFile && startLogFile != DumpStep {
+					startLogFile = binLogFile
+					startLogPos = binLogPos
+				}
+
+			} else {
+				startLogFile = binLogFile
+				startLogPos = binLogPos
 			}
 		}
+	}
 
-		// If sync process is still during the DumpStep, use RollbackFile and RollbackPosition variables
-		if binLogFile == DumpStep {
-			app.Logger.Info(fmt.Sprintf("Sync already being restored from dump position %s/%v", binLogFile, binLogPos))
-			app.RollBackFile = binLogFile
-			app.RollBackPosition = binLogPos
-		} else if binLogPos != 0 && binLogFile != "" {
-			// If sync process is not during the DumpStep, use the rollbackPos variable to start canal in this position
-			app.Logger.Info(fmt.Sprintf("Syncing from minimal position knowledge %s/%v", binLogFile, binLogPos))
-			rollbackPos.Pos = binLogPos
-			rollbackPos.Name = binLogFile
-		}
+	// If sync process is still during the DumpStep, use RollbackFile and RollbackPosition variables
+	if startLogFile == DumpStep {
+		app.Logger.Info(fmt.Sprintf("Sync already being restored from dump position %s/%v", binLogFile, binLogPos))
+		app.RollBackFile = startLogFile
+		app.RollBackPosition = startLogPos
+	} else if startLogPos != 0 && startLogFile != "" {
+		// If sync process is not during the DumpStep, use the rollbackPos variable to start canal in this position
+		app.Logger.Info(fmt.Sprintf("Syncing from minimal position knowledge %s/%v", binLogFile, binLogPos))
+		rollbackPos.Pos = startLogPos
+		rollbackPos.Name = startLogFile
 	}
 
 	// First get the dump configuration. If it is present, use it to dump the database and tables defined.
@@ -250,16 +269,43 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 				connectorsQueue: connectorsQueue,
 			})
 
+			//
+			if !reflect.ValueOf(app.Config.Sources.MySQL.StartPosition).IsZero() {
+				startLogPos = app.Config.Sources.MySQL.StartPosition.Position
+				startLogFile = app.Config.Sources.MySQL.StartPosition.File
+				if startLogPos != 0 && startLogFile != "" {
+					if app.RollBackFile == startLogFile && startLogFile == DumpStep {
+						if startLogPos < app.RollBackPosition {
+							startLogPos = app.RollBackPosition
+						}
+					}
+					if app.RollBackFile != startLogFile && startLogFile == DumpStep {
+						startLogFile = app.RollBackFile
+						startLogPos = app.RollBackPosition
+					}
+
+					if app.RollBackFile > startLogFile && startLogFile != DumpStep {
+						startLogFile = app.RollBackFile
+						startLogPos = app.RollBackPosition
+					}
+				}
+			} else {
+				startLogFile = app.RollBackFile
+				startLogPos = app.RollBackPosition
+			}
+
 			// If rollback is requested during the DumpStep process, set the rollback position and file
 			// to the begining of the dump process. We will check in OnRow event for events already processed.
-			if app.RollBackFile == DumpStep {
+			if startLogFile == DumpStep {
 				app.BinLogPosition = 0
 				app.BinLogFile = DumpStep
+				app.RollBackPosition = startLogPos
+				app.RollBackFile = startLogFile
 			} else {
 				// If rollback is requested during the normal process, set the rollback position and file
 				// to the last knowledge position and clean up the rollback variables.
-				rollbackPos.Pos = app.RollBackPosition
-				rollbackPos.Name = app.RollBackFile
+				rollbackPos.Pos = startLogPos
+				rollbackPos.Name = startLogFile
 				app.RollBackPosition = 0
 				app.RollBackFile = ""
 			}

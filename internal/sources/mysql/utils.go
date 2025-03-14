@@ -100,8 +100,7 @@ func getMinimalBinlogPosition(app *v1alpha1.Application, ring *hashring.HashRing
 	servers := ring.GetServerList()
 	var minPosition uint32
 	var minFile string
-	initialized := false
-	serverInitialized := ""
+	var initialized bool
 	for _, server := range servers {
 
 		// Skip the current server
@@ -110,49 +109,40 @@ func getMinimalBinlogPosition(app *v1alpha1.Application, ring *hashring.HashRing
 		}
 
 		//
-		p, f, err := ring.GetServerBinlogPositionMem(server)
+		pos, fil, err := ring.GetServerBinlogPositionMem(server)
 		if err != nil {
 			app.Logger.Error(fmt.Sprintf("Error getting binlog position for server %s", server), zap.Error(err))
 			continue
 		}
 
-		// Initialize with the first valid position
+		//
 		if !initialized {
-			minPosition = p
-			minFile = f
-			serverInitialized = server
+			minPosition = pos
+			minFile = fil
 			initialized = true
 			continue
 		}
 
-		// Compare files first if they're different
-		if f != minFile {
-			// If files are different, always the lowest position will be the worst case so
-			// its probably the position of the new binlog. So we restore the greater one
-			if p > minPosition {
-				minPosition = p
-				minFile = f
-				serverInitialized = server
-				break
+		//
+		if fil == minFile && fil == DumpStep {
+			if pos < minPosition {
+				minPosition = pos
 			}
-		} else if p < minPosition {
-			// If same file, compare positions
-			minPosition = p
-			minFile = f
-			serverInitialized = server
+		}
+
+		if fil != minFile && fil == DumpStep {
+			minFile = fil
+			minPosition = pos
+		}
+
+		if fil < minFile && fil != DumpStep {
+			minFile = fil
+			minPosition = pos
 		}
 	}
 
-	if initialized {
-		app.Logger.Info(fmt.Sprintf("Most behind binlog position found in file %s at position %d from server %s",
-			minFile, minPosition, serverInitialized),
-			zap.String("file", minFile),
-			zap.Uint32("position", minPosition))
-		return minPosition, minFile, nil
-	}
-
-	app.Logger.Warn("Could not determine binlog position from any server")
 	return minPosition, minFile, nil
+
 }
 
 // processRow function to process the row event
