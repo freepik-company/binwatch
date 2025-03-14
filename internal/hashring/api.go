@@ -65,10 +65,20 @@ func (h *HashRing) hashRingHealthHandler(w http.ResponseWriter, r *http.Request)
 // hashRingBinLogPositionHandler is the handler for the binlog position
 func (h *HashRing) hashRingBinLogPositionHandler(w http.ResponseWriter, r *http.Request, app *v1alpha1.Application) {
 
+	// Get the binlog position
+	binLogFile := app.BinLogFile
+	binLogPosition := app.BinLogPosition
+
+	// Check if the server is rolling back and return this position to the rest of the servers
+	if app.RollBackPosition != 0 && app.RollBackFile != "" {
+		binLogFile = app.RollBackFile
+		binLogPosition = app.RollBackPosition
+	}
+
 	// Create the response
 	response := map[string]interface{}{
-		"file":     app.BinLogFile,
-		"position": app.BinLogPosition,
+		"file":     binLogFile,
+		"position": binLogPosition,
 	}
 
 	// Convert to JSON
