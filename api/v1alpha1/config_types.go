@@ -114,6 +114,8 @@ type ConnectorsConfig struct {
 // RouteConfig
 type RouteConfig struct {
 	Events    []string `yaml:"events"`
+	Database  string   `yaml:"database"`
+	Table     string   `yaml:"table"`
 	Connector string   `yaml:"connector"`
 	Data      string   `yaml:"data"`
 }

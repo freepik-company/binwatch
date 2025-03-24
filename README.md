@@ -139,10 +139,14 @@ connectors:
   # IMPORTANT: This part of configuration does not allow environment variables!!
   routes:
     - events: ["insert", "update"]
+      database: test
+      table: test
       connector: pubsub-add
       data: |
         {{- printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
     - events: ["delete"]
+      database: test
+      table: test
       connector: webhook-delete
       data: |
         {{- printf `{ "index": "test", "id": %v }` .data.id }}
@@ -336,10 +340,14 @@ configMap:
       connectors:
         routes:
           - events: ["insert", "update"]
+            database: test
+            table: test
             connector: webhook-test
             data: |
               {{- printf `{ "index": "test", "id": %v, "data": %s }` .data.id ( toJson .data ) }}
           - events: ["delete"]
+            database: test
+            table: test
             connector: webhook-test
             data: |
               {{- printf `{ "index": "test", "id": %v }` .data.id }}

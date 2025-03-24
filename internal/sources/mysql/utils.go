@@ -38,6 +38,8 @@ import (
 func executeConnectors(app *v1alpha1.Application, connectorsQueue *ConnectorsQueue) {
 	for {
 		var eventStr string
+		var eventTable string
+		var eventDatabase string
 		var data []byte
 
 		// Safely extract an item from the queue
@@ -46,6 +48,8 @@ func executeConnectors(app *v1alpha1.Application, connectorsQueue *ConnectorsQue
 			app.Logger.Debug(fmt.Sprintf("Connectors Queue size: %d", len(connectorsQueue.queue)))
 			eventStr = connectorsQueue.queue[0].eventType
 			data = connectorsQueue.queue[0].data
+			eventTable = connectorsQueue.queue[0].eventTable
+			eventDatabase = connectorsQueue.queue[0].eventDatabase
 			connectorsQueue.queue = connectorsQueue.queue[1:]
 			connectorsQueue.mutex.Unlock()
 
@@ -58,7 +62,7 @@ func executeConnectors(app *v1alpha1.Application, connectorsQueue *ConnectorsQue
 				if slices.Contains(connector.Events, event) {
 					// Process webhooks
 					for _, wh := range app.Config.Connectors.WebHook {
-						if wh.Name == connector.Connector {
+						if wh.Name == connector.Connector && connector.Table == eventTable && connector.Database == eventDatabase {
 							app.Logger.Debug("Sending data to webhook connector",
 								zap.String("connector", connector.Connector),
 								zap.String("data", string(data)),
@@ -73,7 +77,7 @@ func executeConnectors(app *v1alpha1.Application, connectorsQueue *ConnectorsQue
 
 					// Process pubsub
 					for _, pb := range app.Config.Connectors.PubSub {
-						if pb.Name == connector.Connector {
+						if pb.Name == connector.Connector && connector.Table == eventTable && connector.Database == eventDatabase {
 							app.Logger.Debug("Sending data to pubsub connector",
 								zap.String("connector", connector.Connector),
 								zap.String("data", string(data)),

@@ -63,8 +63,10 @@ type ConnectorsQueue struct {
 }
 
 type QueueItems struct {
-	eventType string
-	data      []byte
+	eventType     string
+	eventTable    string
+	eventDatabase string
+	data          []byte
 }
 
 // CanalEventHandler is a custom event handler for canal
@@ -386,8 +388,10 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 	h.connectorsQueue.mutex.Lock()
 	defer h.connectorsQueue.mutex.Unlock()
 	h.connectorsQueue.queue = append(h.connectorsQueue.queue, QueueItems{
-		eventType: e.Action,
-		data:      jsonData,
+		eventType:     e.Action,
+		eventTable:    e.Table.Name,
+		eventDatabase: e.Table.Schema,
+		data:          jsonData,
 	})
 
 	// Calculate conenctorsQueue size and sleep time if needed

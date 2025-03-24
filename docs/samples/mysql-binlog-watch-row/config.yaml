@@ -104,11 +104,15 @@ connectors:
 
   routes:
     - events: ["insert", "update"]
+      database: test
+      table: test
       connector: pubsub-test-add
       data: |-
         {{ $pepe := printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
         {{- $pepe }}
     - events: ["delete"]
+      database: test
+      table: test
       connector: webhook-test
       data: |
         {{- printf `{ "index": "test", "id": %v }` .data.id }}
