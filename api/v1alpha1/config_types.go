@@ -96,6 +96,9 @@ type DumpConfig struct {
 	Databases             []string `yaml:"databases"`
 	Tables                []string `yaml:"tables"`
 	MySQLDumpBinPath      string   `yaml:"mysqldump_bin_path"`
+	Host                  string   `yaml:"host,omitempty"`
+	Port                  string   `yaml:"port,omitempty"`
+	ServerID              string   `yaml:"server_id,omitempty"`
 }
 
 // FilterTable
