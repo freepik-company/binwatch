@@ -8,7 +8,6 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/go-mysql-org/go-mysql v1.11.0
 	github.com/spf13/cobra v1.9.1
-	github.com/tiendc/go-deepcopy v1.5.0
 	go.uber.org/zap v1.27.0
 	gopkg.in/yaml.v3 v3.0.1
 )

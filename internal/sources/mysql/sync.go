@@ -259,11 +259,15 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 		if rollbackPos != (mysql.Position{}) {
 			err = c.RunFrom(rollbackPos)
 		} else {
-			latestPos, err := c.GetMasterPos()
-			if err != nil {
-				app.Logger.Fatal("Error getting master position", zap.Error(err))
+			if reflect.ValueOf(app.Config.Sources.MySQL.DumpConfig).IsZero() {
+				latestPos, err := c.GetMasterPos()
+				if err != nil {
+					app.Logger.Fatal("Error getting master position", zap.Error(err))
+				}
+				err = c.RunFrom(latestPos)
+			} else {
+				err = c.Run()
 			}
-			err = c.RunFrom(latestPos)
 		}
 
 		// Listen for specific signal when mysqldump ends
