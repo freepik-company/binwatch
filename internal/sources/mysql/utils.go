@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-mysql-org/go-mysql/canal"
+	"github.com/go-mysql-org/go-mysql/schema"
 	"slices"
 	"strings"
 	"time"
@@ -150,15 +151,15 @@ func getMinimalBinlogPosition(app *v1alpha1.Application, ring *hashring.HashRing
 }
 
 // processRow function to process the row event
-func processRow(app *v1alpha1.Application, columnNames []string, row []interface{}) (jsonData []byte, err error) {
+func processRow(app *v1alpha1.Application, row []interface{}, columns []schema.TableColumn) (jsonData []byte, err error) {
 
 	// Map the row values to the column names
 	rowMap := make(map[string]interface{})
 	for idx, value := range row {
-		if idx < len(columnNames) {
-			rowMap[columnNames[idx]] = value
+		if idx >= len(columns) {
+			rowMap[fmt.Sprintf("unknown_column_%d", idx)] = value
 		} else {
-			rowMap[fmt.Sprintf("unknown_col_%d", idx)] = value
+			rowMap[columns[idx].Name] = value
 		}
 	}
 

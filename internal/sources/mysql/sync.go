@@ -259,7 +259,11 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 		if rollbackPos != (mysql.Position{}) {
 			err = c.RunFrom(rollbackPos)
 		} else {
-			err = c.Run()
+			latestPos, err := c.GetMasterPos()
+			if err != nil {
+				app.Logger.Fatal("Error getting master position", zap.Error(err))
+			}
+			err = c.RunFrom(latestPos)
 		}
 
 		// Listen for specific signal when mysqldump ends
@@ -437,14 +441,12 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 		}
 	}
 
-	// Get the column names from the event to process the row
-	columnNames := make([]string, 0, len(e.Table.Columns))
-	for _, column := range e.Table.Columns {
-		columnNames = append(columnNames, column.Name)
-	}
-
 	// Process the row event
-	jsonData, err = processRow(h.app, columnNames, e.Rows[0])
+	row := e.Rows[0]
+	if e.Action == canal.UpdateAction {
+		row = e.Rows[1]
+	}
+	jsonData, err = processRow(h.app, row, e.Table.Columns)
 	if err != nil {
 		return fmt.Errorf("error processing row: %v", err)
 	}
