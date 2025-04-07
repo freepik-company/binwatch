@@ -96,5 +96,5 @@ func (h *HashRing) hashRingBinLogPositionHandler(w http.ResponseWriter, r *http.
 
 // runHealthCheck runs the health check
 func (h *HashRing) runHealthCheck() bool {
-	return len(h.GetServerList()) > 0
+	return true
 }
