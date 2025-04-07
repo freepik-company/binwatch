@@ -280,7 +280,6 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 			c.Close()
 
 			cfg.Dump = canal.DumpConfig{}
-			err = nil
 
 			cfg.Addr = fmt.Sprintf("%s:%s", app.Config.Sources.MySQL.Host, app.Config.Sources.MySQL.Port)
 			serverId, err = strconv.ParseUint(app.Config.Sources.MySQL.ServerID, 10, 32)
