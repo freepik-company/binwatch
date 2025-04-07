@@ -34,7 +34,9 @@ func (h *HashRing) runHashRingAPI(app *v1alpha1.Application) {
 
 	// Define the API routes
 	// Health check
-	http.HandleFunc("/health", h.hashRingHealthHandler)
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		h.hashRingHealthHandler(w, r, app)
+	})
 	// Binlog position
 	http.HandleFunc("/position", func(w http.ResponseWriter, r *http.Request) {
 		h.hashRingBinLogPositionHandler(w, r, app)
@@ -50,10 +52,11 @@ func (h *HashRing) runHashRingAPI(app *v1alpha1.Application) {
 }
 
 // hashRingHealthHandler is the handler for the health check
-func (h *HashRing) hashRingHealthHandler(w http.ResponseWriter, r *http.Request) {
+func (h *HashRing) hashRingHealthHandler(w http.ResponseWriter, r *http.Request, app *v1alpha1.Application) {
 
 	// Healthcheck
 	if h.runHealthCheck() {
+		w.Header().Set("X-Server-ID", app.Config.ServerId)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	} else {

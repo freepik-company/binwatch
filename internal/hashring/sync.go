@@ -94,7 +94,12 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 			// Execute healthcheck to http://<HOST+IP>/health
 			resp, err := hClient.Get(fmt.Sprintf("http://%s/health", backend))
 			if err == nil && resp.StatusCode == 200 {
-				hostPool = append(hostPool, backend)
+				hostname := resp.Header.Get("X-Server-ID")
+				if hostname == "" {
+					app.Logger.Error(fmt.Sprintf("No hostname returned from healthcheck on host %s", backend))
+					continue
+				}
+				hostPool = append(hostPool, hostname)
 			}
 
 			if err != nil || resp.StatusCode != 200 {
