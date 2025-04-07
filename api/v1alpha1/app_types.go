@@ -26,14 +26,11 @@ import (
 
 // Application TODO
 type Application struct {
-	Config           *ConfigSpec
-	Logger           *zap.Logger
-	Context          context.Context
-	BinLogPosition   uint32
-	BinLogFile       string
-	RollBackPosition uint32
-	RollBackFile     string
-	RollbackNeeded   bool
+	Config         *ConfigSpec
+	Logger         *zap.Logger
+	Context        context.Context
+	BinLogPosition uint32
+	BinLogFile     string
 
 	// Carried stuff
 	PubsubClient map[string]*pubsub.Client

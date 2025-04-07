@@ -114,10 +114,6 @@ sources:
       #   - "--single-transaction"
       # Default value is /usr/bin/mysqldump, path where mysqldump is located in the Docker image
       # mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
-      # Optional if you want to use a different mysql server for the mysqldump (e.g. for a slave)
-      # host: mysql
-      # port: 3306
-      # server_id: 101
 
 # Data connectors configuration
 # List of connectors to send the data to

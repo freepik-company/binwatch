@@ -31,7 +31,6 @@ import (
 	"binwatch/api/v1alpha1"
 	"binwatch/internal/connectors/pubsub"
 	"binwatch/internal/connectors/webhook"
-	"binwatch/internal/hashring"
 )
 
 // executeConnectors function to execute the connectors based on the configuration
@@ -97,57 +96,6 @@ func executeConnectors(app *v1alpha1.Application, connectorsQueue *ConnectorsQue
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-}
-
-// getMinimalBinlogPosition function to get the minimal binlog position from the hashring
-func getMinimalBinlogPosition(app *v1alpha1.Application, ring *hashring.HashRing) (uint32, string, error) {
-	// Get current servers in the hashring
-	servers := ring.GetServerList()
-	var minPosition uint32
-	var minFile string
-	var initialized bool
-	for _, server := range servers {
-
-		// Skip the current server
-		if server == app.Config.ServerId {
-			continue
-		}
-
-		//
-		pos, fil, err := ring.GetServerBinlogPositionMem(server)
-		if err != nil {
-			app.Logger.Error(fmt.Sprintf("Error getting binlog position for server %s", server), zap.Error(err))
-			continue
-		}
-
-		//
-		if !initialized {
-			minPosition = pos
-			minFile = fil
-			initialized = true
-			continue
-		}
-
-		//
-		if fil == minFile && fil == DumpStep {
-			if pos < minPosition {
-				minPosition = pos
-			}
-		}
-
-		if fil != minFile && fil == DumpStep {
-			minFile = fil
-			minPosition = pos
-		}
-
-		if fil < minFile && fil != DumpStep {
-			minFile = fil
-			minPosition = pos
-		}
-	}
-
-	return minPosition, minFile, nil
-
 }
 
 // processRow function to process the row event

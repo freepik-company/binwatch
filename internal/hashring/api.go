@@ -17,8 +17,6 @@ limitations under the License.
 package hashring
 
 import (
-	//
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -36,10 +34,6 @@ func (h *HashRing) runHashRingAPI(app *v1alpha1.Application) {
 	// Health check
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		h.hashRingHealthHandler(w, r, app)
-	})
-	// Binlog position
-	http.HandleFunc("/position", func(w http.ResponseWriter, r *http.Request) {
-		h.hashRingBinLogPositionHandler(w, r, app)
 	})
 
 	// Start the server
@@ -63,38 +57,6 @@ func (h *HashRing) hashRingHealthHandler(w http.ResponseWriter, r *http.Request,
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("NOK"))
 	}
-}
-
-// hashRingBinLogPositionHandler is the handler for the binlog position
-func (h *HashRing) hashRingBinLogPositionHandler(w http.ResponseWriter, r *http.Request, app *v1alpha1.Application) {
-
-	// Get the binlog position
-	binLogFile := app.BinLogFile
-	binLogPosition := app.BinLogPosition
-
-	// Check if the server is rolling back and return this position to the rest of the servers
-	if app.RollBackPosition != 0 && app.RollBackFile != "" {
-		binLogFile = app.RollBackFile
-		binLogPosition = app.RollBackPosition
-	}
-
-	// Create the response
-	response := map[string]interface{}{
-		"file":     binLogFile,
-		"position": binLogPosition,
-	}
-
-	// Convert to JSON
-	jsonResponse, err := json.Marshal(response)
-	if err != nil {
-		http.Error(w, "Error generating JSON", http.StatusInternalServerError)
-		return
-	}
-
-	// Write the response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(jsonResponse)
 }
 
 // runHealthCheck runs the health check

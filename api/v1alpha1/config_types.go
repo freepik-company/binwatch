@@ -55,7 +55,7 @@ type Thresholds struct {
 
 // HashringConfig
 type HashringConfig struct {
-	ConfidentMode       ConfidentConfig        `yaml:"confident_mode"`
+	Redis               RedisConfig            `yaml:"redis"`
 	SyncWorkerTime      string                 `yaml:"sync_worker_time"`
 	APIPort             string                 `yaml:"api_port"`
 	DnsRingDiscovery    DnsDiscoveryRingConfig `yaml:"dns_ring_discovery"`

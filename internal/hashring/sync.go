@@ -127,47 +127,15 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 
 		for _, server := range appendServersList {
 			app.Logger.Info(fmt.Sprintf("Adding server %s to hashring", server))
-			h.AddServer(app, server)
+			h.AddServer(server)
 		}
 
 		// If there are servers to delete, we remove them from the hashring and update the binlog position to the lowest
 		// node removed position in the hashring
 		for _, server := range deleteServersList {
 			app.Logger.Info(fmt.Sprintf("Removing server %s from hashring", server))
-
-			// Get the last binlog position for the server stored in memory
-			rollBackPosition, rollBackFile, err := h.GetServerBinlogPositionMem(server)
-			if err != nil {
-				app.Logger.Error(fmt.Sprintf("Unable to get binlog position for server %s, using "+
-					"this server last positions", server), zap.Error(err))
-				rollBackPosition = app.RollBackPosition
-				rollBackFile = app.RollBackFile
-			}
-
-			// Need to compare files properly before comparing positions
-			if rollBackFile != app.BinLogFile {
-				// If files are different, always alive server will have the newest binlog file, so the safest way
-				// is to rollback to the last position of the server that left the hashring
-				app.Logger.Info(fmt.Sprintf("Rolling back binlog file and position from server %s", server),
-					zap.Uint32("position", rollBackPosition), zap.String("file", rollBackFile))
-				app.RollBackPosition = rollBackPosition
-				app.RollBackFile = rollBackFile
-				app.RollbackNeeded = true
-			} else if rollBackPosition < app.BinLogPosition {
-				// If same file, compare positions
-				app.Logger.Info(fmt.Sprintf("Rolling back binlog position from server %s", server),
-					zap.Uint32("position", rollBackPosition), zap.String("file", rollBackFile))
-				app.RollBackPosition = rollBackPosition
-				app.RollBackFile = rollBackFile
-				app.RollbackNeeded = true
-			}
-
-			// Then remove the server
 			h.RemoveServer(server)
 		}
-
-		// Sync binlog positions for all the nodes in the hashring
-		h.SyncBinLogPositions(app)
 
 		time.Sleep(syncTime)
 	}
