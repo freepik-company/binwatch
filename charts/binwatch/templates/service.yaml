@@ -17,7 +17,7 @@ spec:
   selector:
     {{- include "binwatch.selectorLabels" . | nindent 4 }}
 
-{{ if .Values.highAvailabilityMode }}
+{{ if .Values.highAvailabilityMode.enabled }}
 ---
 apiVersion: v1
 kind: Service

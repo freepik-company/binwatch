@@ -30,7 +30,7 @@ spec:
           averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
     {{- end }}
 
-{{ if .Values.highAvailabilityMode }}
+{{ if .Values.highAvailabilityMode.enabled }}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
