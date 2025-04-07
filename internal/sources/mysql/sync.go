@@ -259,11 +259,13 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 		if rollbackPos != (mysql.Position{}) {
 			err = c.RunFrom(rollbackPos)
 		} else {
-			if reflect.ValueOf(app.Config.Sources.MySQL.DumpConfig).IsZero() {
-				latestPos, err := c.GetMasterPos()
-				if err != nil {
+			if !reflect.ValueOf(app.Config.Sources.MySQL.DumpConfig).IsZero() {
+				latestPos, errM := c.GetMasterPos()
+				if errM != nil || latestPos == (mysql.Position{}) {
 					app.Logger.Fatal("Error getting master position", zap.Error(err))
 				}
+				app.BinLogPosition = latestPos.Pos
+				app.BinLogFile = latestPos.Name
 				err = c.RunFrom(latestPos)
 			} else {
 				err = c.Run()
@@ -276,6 +278,9 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 
 			// Close existing canal
 			c.Close()
+
+			cfg.Dump = canal.DumpConfig{}
+			err = nil
 
 			cfg.Addr = fmt.Sprintf("%s:%s", app.Config.Sources.MySQL.Host, app.Config.Sources.MySQL.Port)
 			serverId, err = strconv.ParseUint(app.Config.Sources.MySQL.ServerID, 10, 32)

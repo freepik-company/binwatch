@@ -107,11 +107,11 @@ run-example:
 		echo "UPDATE the row $$i..."; \
 		docker exec -i mysql-binlog-watch-row mysql -uroot -pMiContrasenaSegura -e " \
 			USE test; \
-			UPDATE test SET name='Modified_$$i' WHERE id=$$i;" ; \
+			UPDATE test SET name='Modified_$$i' WHERE name='Example_$$i';" ; \
 		echo "DELETE the row $$i..."; \
 		docker exec -i mysql-binlog-watch-row mysql -uroot -pMiContrasenaSegura -e " \
 			USE test; \
-			DELETE FROM test WHERE id=$$i;" ; \
+			DELETE FROM test WHERE name='Modified_$$i';" ; \
 	done
 
 	ps aux | grep '[g]o-build' | grep './docs/' | cut -f2 -w | xargs -r kill -9 || true
@@ -124,11 +124,11 @@ run-example:
 		echo "UPDATE the row $$i..."; \
 		docker exec -i mysql-binlog-watch-row mysql -uroot -pMiContrasenaSegura -e " \
 			USE test; \
-			UPDATE test SET name='Modified_$$i' WHERE id=$$i;" ; \
+			UPDATE test SET name='Modified_$$i' WHERE name='Example_$$i';" ; \
 		echo "DELETE the row $$i..."; \
 		docker exec -i mysql-binlog-watch-row mysql -uroot -pMiContrasenaSegura -e " \
 			USE test; \
-			DELETE FROM test WHERE id=$$i;" ; \
+			DELETE FROM test WHERE name='Modified_$$i';" ; \
 	done
 
 	@sleep 5

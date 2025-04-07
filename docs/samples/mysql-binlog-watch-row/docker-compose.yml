@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0.31
     container_name: mysql-binlog-watch-row
     restart: always
     environment:
@@ -17,6 +17,13 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  redis:
+    image: redis:latest
+    container_name: redis-binlog-watch-row
+    restart: always
+    ports:
+      - "6379:6379"
 
 volumes:
   mysql_data:

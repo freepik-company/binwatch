@@ -26,6 +26,7 @@ import (
 	"time"
 
 	//
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 
 	//
@@ -105,6 +106,15 @@ func SyncCommand(cmd *cobra.Command, args []string) {
 		syncTime, err := time.ParseDuration(app.Config.Hashring.SyncWorkerTime)
 		if err != nil {
 			app.Logger.Fatal("Error parsing duration", zap.Error(err))
+		}
+
+		// If confident mode is enabled, we need to set the redis client
+		if app.Config.Hashring.ConfidentMode.Enabled {
+			app.RedisClient = redis.NewClient(&redis.Options{
+				Addr:     app.Config.Hashring.ConfidentMode.Store.Host + ":" + app.Config.Hashring.ConfidentMode.Store.Port,
+				Password: app.Config.Hashring.ConfidentMode.Store.Password,
+				DB:       0, // use default DB
+			})
 		}
 
 		go hr.SyncWorker(&app, syncTime)

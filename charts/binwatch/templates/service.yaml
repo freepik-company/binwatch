@@ -16,3 +16,25 @@ spec:
       protocol: TCP
   selector:
     {{- include "binwatch.selectorLabels" . | nindent 4 }}
+
+{{ if .Values.highAvailabilityMode }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "binwatch.fullname" . }}-replica
+  labels:
+    {{- include "binwatch.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+  selector:
+    {{- include "binwatch.selectorLabelsReplica" . | nindent 4 }}
+{{- end }}

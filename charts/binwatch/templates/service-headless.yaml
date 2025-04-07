@@ -10,3 +10,19 @@ spec:
   publishNotReadyAddresses: true
   selector:
     {{- include "binwatch.selectorLabels" . | nindent 4 }}
+
+{{ if .Values.highAvailabilityMode }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "binwatch.fullname" . }}-headless-replica
+  labels:
+    {{- include "binwatch.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "binwatch.selectorLabelsReplica" . | nindent 4 }}
+{{- end }}

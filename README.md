@@ -59,6 +59,17 @@ flow_control:
 # Hashring configuration for HA and load balancing purposes
 hashring:
 
+  # Confident mode
+  # This mode stores the position of the binlog in a redis server to avoid losing events when a new node is added to the ring
+  # confident_mode:
+  #  enabled: true
+  #
+  #  redis:
+  #    host: redis
+  #    port: 6379
+  #    password: ""
+  #    key_prefix: "binwatch"
+  
   # Sync worker time to sync the ring nodes when a new node is added or removed from the ring
   sync_worker_time: 300ms
   

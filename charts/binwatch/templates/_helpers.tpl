@@ -50,6 +50,11 @@ app.kubernetes.io/name: {{ include "binwatch.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
+{{- define "binwatch.selectorLabelsReplica" -}}
+app.kubernetes.io/name: {{ include "binwatch.name" . }}-replica
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
 {{/*
 Create the name of the service account to use
 */}}
