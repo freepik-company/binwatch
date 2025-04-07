@@ -138,10 +138,6 @@ sources:
       #   - "--single-transaction"
       # Default value is /usr/bin/mysqldump, path where mysqldump is located in the Docker image
       mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
-      # Optional if you want to use a different mysql server for the mysqldump (e.g. for a slave)
-      # host: mysql
-      # port: 3306
-      # server_id: 101
 
 # Data connectors configuration
 # List of connectors to send the data to
@@ -193,17 +189,7 @@ or those auto-discovered via DNS. With this hashring, all service replicas read 
 those entries for which they have responsibility (the "cheese" is equally divided among them).
 
 ### High Availability and Recovery Mechanism
-The high availability and failure recovery process works as follows:
-
-* When three nodes (A, B, and C) exist in the hashring, they operate in synchronization up to, for example, position 30 
-in the binlog. They maintain synchronization by communicating with each other via http://<ip>:<port>/position at 
-intervals defined by the sync_worker_time_ms parameter.
-* If node A fails, the hashring automatically reorganizes so nodes B and C redistribute the workload. These nodes 
-detect node A's failure and immediately begin reading from the binlog at A's last known position (position 30). 
-From this point, B and C divide A's workload between them while continuing to process the binlog.
-* When node A recovers, the hashring reorganizes again. Node A begins reading from the binlog starting at the lowest 
-position found between nodes B and C. From this point forward, the workload is once again distributed equally among 
-all three nodes.
+The high availability works with a memory store server (Redis) that stores the binlog position of each node.
 
 > [!IMPORTANT]
 > This hashring solution may lead to duplicate events during brief periods of time, but this approach was deliberately 

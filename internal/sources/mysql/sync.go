@@ -29,7 +29,6 @@ import (
 	"cloud.google.com/go/pubsub"
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/go-mysql-org/go-mysql/replication"
 	"go.uber.org/zap"
 
 	//
@@ -43,15 +42,13 @@ const (
 )
 
 var (
-	ErrRollback  = errors.New("rollback requested")
-	DumpFinished = errors.New("dump finished")
-	rollbackPos  = mysql.Position{}
-	err          error
-	binLogPos    uint32
-	binLogFile   string
-	jsonData     []byte
-	startLogPos  uint32
-	startLogFile string
+	DumpFinished    = errors.New("dump finished")
+	binlogPosition  = mysql.Position{}
+	dumpRollbackPos = uint32(0)
+	err             error
+	binLogPos       uint32
+	binLogFile      string
+	jsonData        []byte
 	// Initialize connectorsQueue and run workers for execute Connectors
 	connectorsQueue = &ConnectorsQueue{
 		queue: []QueueItems{},
@@ -106,63 +103,32 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 		HeartbeatPeriod: heathbeatPeriod,
 	}
 
-	// If set, get start_position from the config file. If it is lower than the minimal position from the servers, use it.
-	if !reflect.ValueOf(app.Config.Sources.MySQL.StartPosition).IsZero() {
-		startLogPos = app.Config.Sources.MySQL.StartPosition.Position
-		startLogFile = app.Config.Sources.MySQL.StartPosition.File
-		app.Logger.Info(fmt.Sprintf("Start position configured in %s/%v", startLogFile, startLogPos))
-	}
-
-	// If hashring is configured, check if there are servers running with the position of the binlog
+	// If hashring is configured, get the current position from the memory cache
 	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
-
-		// Get minimal binlog position from all servers
-		binLogPos, binLogFile, err = getMinimalBinlogPosition(app, ring)
+		binlogPosition.Pos, binlogPosition.Name, err = hashring.GetRedisLogPos(app)
 		if err != nil {
 			app.Logger.Fatal("Error getting minimal binlog position", zap.Error(err))
 		}
 
-		// If set, get start_position from the config file. If it is lower than the minimal position from the servers, use it.
-		if binLogFile != "" && binLogPos == 0 {
-			if startLogPos != 0 && startLogFile != "" {
-				if binLogFile == startLogFile && startLogFile == DumpStep {
-					if startLogPos < binLogPos {
-						startLogPos = binLogPos
-					}
-				}
-				if binLogFile != startLogFile && startLogFile == DumpStep {
-					startLogFile = binLogFile
-					startLogPos = binLogPos
-				}
-
-				if binLogFile > startLogFile && startLogFile != DumpStep {
-					startLogFile = binLogFile
-					startLogPos = binLogPos
-				}
-
-			} else {
-				startLogFile = binLogFile
-				startLogPos = binLogPos
-			}
+		app.Logger.Info(fmt.Sprintf("Binlog position detected from memory store %s/%d", binlogPosition.Name, binlogPosition.Pos))
+		if binlogPosition.Name == DumpStep {
+			app.Logger.Info(fmt.Sprintf("Dump step detected that it was in progress, let's start from the last position knowledge %d", binlogPosition.Pos))
+			dumpRollbackPos = binlogPosition.Pos
+			binlogPosition.Pos = 0
 		}
 	}
 
-	// If sync process is still during the DumpStep, use RollbackFile and RollbackPosition variables
-	if startLogFile == DumpStep {
-		app.Logger.Info(fmt.Sprintf("Sync already being restored from dump position %s/%v", binLogFile, binLogPos))
-		app.RollBackFile = startLogFile
-		app.RollBackPosition = startLogPos
-	} else if startLogPos != 0 && startLogFile != "" {
-		// If sync process is not during the DumpStep, use the rollbackPos variable to start canal in this position
-		app.Logger.Info(fmt.Sprintf("Syncing from minimal position knowledge %s/%v", binLogFile, binLogPos))
-		rollbackPos.Pos = startLogPos
-		rollbackPos.Name = startLogFile
+	// If set, get start_position from the config file. Use it to start canal
+	if !reflect.ValueOf(app.Config.Sources.MySQL.StartPosition).IsZero() {
+		binlogPosition.Pos = app.Config.Sources.MySQL.StartPosition.Position
+		binlogPosition.Name = app.Config.Sources.MySQL.StartPosition.File
+		app.Logger.Info(fmt.Sprintf("Start position configured in %s/%v", binLogFile, binLogPos))
 	}
 
 	// First get the dump configuration. If it is present, use it to dump the database and tables defined.
 	// If user defines just one database, it will check for tables to dump. If user defines more than one database,
 	//it will dump all tables from the databases defined.
-	if !reflect.ValueOf(app.Config.Sources.MySQL.DumpConfig).IsZero() {
+	if !reflect.ValueOf(app.Config.Sources.MySQL.DumpConfig).IsZero() && (binlogPosition.Name == "" || binlogPosition.Name == DumpStep) {
 		if len(app.Config.Sources.MySQL.DumpConfig.Databases) > 1 && len(app.Config.Sources.MySQL.DumpConfig.Tables) > 0 {
 			cfg.Dump.Databases = app.Config.Sources.MySQL.DumpConfig.Databases
 			app.Logger.Info(fmt.Sprintf("database to dump: %s  with all tables", cfg.Dump.TableDB))
@@ -176,24 +142,6 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 			app.Logger.Fatal("no database configured")
 		}
 
-		// Set the host and port for the dump process. If the port is not defined, use the default port from the configuration.
-		if app.Config.Sources.MySQL.DumpConfig.Host != "" {
-			if app.Config.Sources.MySQL.DumpConfig.Port != "" {
-				cfg.Addr = fmt.Sprintf("%s:%s", app.Config.Sources.MySQL.DumpConfig.Host, app.Config.Sources.MySQL.DumpConfig.Port)
-			} else {
-				cfg.Addr = fmt.Sprintf("%s:%s", app.Config.Sources.MySQL.DumpConfig.Host, app.Config.Sources.MySQL.Port)
-			}
-
-			serverId, err = strconv.ParseUint(app.Config.Sources.MySQL.DumpConfig.ServerID, 10, 32)
-			if err != nil {
-				app.Logger.Fatal("Error parsing server ID for mysqldump host", zap.Error(err))
-			}
-			cfg.ServerID = uint32(serverId)
-
-			app.Logger.Debug(fmt.Sprintf("Another host for mysqldump selected: %d - %s", cfg.ServerID, cfg.Addr))
-
-		}
-
 		// Define mysqldump path. If it is running in Docker container, the default path is /bin/mysqldump
 		cfg.Dump.ExecutionPath = app.Config.Sources.MySQL.DumpConfig.MySQLDumpBinPath
 		if app.Config.Sources.MySQL.DumpConfig.MySQLDumpBinPath == "" {
@@ -202,6 +150,7 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 
 		// Set BinLogFile with the dump step.
 		app.BinLogFile = DumpStep
+		binlogPosition.Name = DumpStep
 		cfg.Dump.SkipMasterData = true
 		if len(app.Config.Sources.MySQL.DumpConfig.MySQLDumpExtraOptions) > 0 {
 			app.Logger.Debug(fmt.Sprintf("Extra options for mysqldump: %v", app.Config.Sources.MySQL.DumpConfig.MySQLDumpExtraOptions))
@@ -253,143 +202,19 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 	// Start canal loop to sync MySQL with rollback support
 	for {
 
-		// If rollback mysql position is defined, then start canal From this position
-		// In other cases or during the DumpStep process, start canal normally. We will
-		// check if rollback is needed during the canal loop.
-		if rollbackPos != (mysql.Position{}) {
-			err = c.RunFrom(rollbackPos)
+		if binlogPosition.Name == DumpStep {
+			app.Logger.Info("Starting mysqldump process")
+			err = c.Run()
 		} else {
-			if !reflect.ValueOf(app.Config.Sources.MySQL.DumpConfig).IsZero() {
-				latestPos, errM := c.GetMasterPos()
-				if errM != nil || latestPos == (mysql.Position{}) {
+			if binlogPosition.Pos == 0 {
+				binlogPosition, errM := c.GetMasterPos()
+				if errM != nil || binlogPosition == (mysql.Position{}) {
 					app.Logger.Fatal("Error getting master position", zap.Error(err))
 				}
-				app.BinLogPosition = latestPos.Pos
-				app.BinLogFile = latestPos.Name
-				err = c.RunFrom(latestPos)
-			} else {
-				err = c.Run()
 			}
-		}
-
-		// Listen for specific signal when mysqldump ends
-		if errors.Is(err, DumpFinished) {
-			app.Logger.Info(fmt.Sprintf("Finished dump step: %s", DumpStep))
-
-			// Close existing canal
-			c.Close()
-
-			cfg.Dump = canal.DumpConfig{}
-
-			cfg.Addr = fmt.Sprintf("%s:%s", app.Config.Sources.MySQL.Host, app.Config.Sources.MySQL.Port)
-			serverId, err = strconv.ParseUint(app.Config.Sources.MySQL.ServerID, 10, 32)
-			if err != nil {
-				app.Logger.Fatal("Error parsing server ID", zap.Error(err))
-			}
-			cfg.ServerID = uint32(serverId)
-
-			app.Logger.Info(fmt.Sprintf("Binlog syncing now running in database %d - %s", cfg.ServerID, cfg.Addr))
-
-			// Recreate new canal with the same configuration
-			c, err = canal.NewCanal(cfg)
-			if err != nil {
-				app.Logger.Fatal("Error recreating canal", zap.Error(err))
-				return
-			}
-
-			continue
-
-		}
-
-		// Listen for specific signal to rollback
-		if errors.Is(err, ErrRollback) {
-
-			// Log rollback reached
-			app.Logger.Info("A rollback is requested. Stopping and recreating canal from last knowledge position",
-				zap.Uint32("position", app.RollBackPosition), zap.String("file", app.RollBackFile))
-
-			// Close existing canal
-			c.Close()
-
-			// Recreate new canal with the same configuration
-			c, err = canal.NewCanal(cfg)
-			if err != nil {
-				app.Logger.Fatal("Error recreating canal", zap.Error(err))
-				return
-			}
-
-			// Set rollback needed to false
-			app.RollbackNeeded = false
-
-			// Register a handler to handle canal events to the new canal
-			c.SetEventHandler(&CanalEventHandler{
-				app:             app,
-				ring:            ring,
-				canal:           c,
-				connectorsQueue: connectorsQueue,
-			})
-
-			//
-			if !reflect.ValueOf(app.Config.Sources.MySQL.StartPosition).IsZero() {
-				startLogPos = app.Config.Sources.MySQL.StartPosition.Position
-				startLogFile = app.Config.Sources.MySQL.StartPosition.File
-				if startLogPos != 0 && startLogFile != "" {
-					if app.RollBackFile == startLogFile && startLogFile == DumpStep {
-						if startLogPos < app.RollBackPosition {
-							startLogPos = app.RollBackPosition
-						}
-					}
-					if app.RollBackFile != startLogFile && startLogFile == DumpStep {
-						startLogFile = app.RollBackFile
-						startLogPos = app.RollBackPosition
-					}
-
-					if app.RollBackFile > startLogFile && startLogFile != DumpStep {
-						startLogFile = app.RollBackFile
-						startLogPos = app.RollBackPosition
-					}
-				}
-			} else {
-				startLogFile = app.RollBackFile
-				startLogPos = app.RollBackPosition
-			}
-
-			// If rollback is requested during the DumpStep process, set the rollback position and file
-			// to the begining of the dump process. We will check in OnRow event for events already processed.
-			if startLogFile == DumpStep {
-				// Set the host and port for the dump process. If the port is not defined, use the default port from the configuration.
-				if app.Config.Sources.MySQL.DumpConfig.Host != "" {
-					if app.Config.Sources.MySQL.DumpConfig.Port != "" {
-						cfg.Addr = fmt.Sprintf("%s:%s", app.Config.Sources.MySQL.DumpConfig.Host, app.Config.Sources.MySQL.DumpConfig.Port)
-					} else {
-						cfg.Addr = fmt.Sprintf("%s:%s", app.Config.Sources.MySQL.DumpConfig.Host, app.Config.Sources.MySQL.Port)
-					}
-
-					serverId, err = strconv.ParseUint(app.Config.Sources.MySQL.DumpConfig.ServerID, 10, 32)
-					if err != nil {
-						app.Logger.Fatal("Error parsing server ID for mysqldump host", zap.Error(err))
-					}
-					cfg.ServerID = uint32(serverId)
-
-					app.Logger.Debug(fmt.Sprintf("Another host for mysqldump selected: %d - %s", cfg.ServerID, cfg.Addr))
-
-				}
-				app.BinLogPosition = 0
-				app.BinLogFile = DumpStep
-				app.RollBackPosition = startLogPos
-				app.RollBackFile = startLogFile
-			} else {
-				cfg.Addr = fmt.Sprintf("%s:%s", app.Config.Sources.MySQL.Host, app.Config.Sources.MySQL.Port)
-				cfg.ServerID = uint32(serverId)
-				// If rollback is requested during the normal process, set the rollback position and file
-				// to the last knowledge position and clean up the rollback variables.
-				rollbackPos.Pos = startLogPos
-				rollbackPos.Name = startLogFile
-				app.RollBackPosition = 0
-				app.RollBackFile = ""
-			}
-
-			continue
+			app.BinLogPosition = binlogPosition.Pos
+			app.BinLogFile = binlogPosition.Name
+			err = c.RunFrom(binlogPosition)
 		}
 
 		if err != nil {
@@ -405,6 +230,15 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 // OnRow is called when a row event is received, for Dump and Normal process.
 func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 
+	// If we are recovering the dump process
+	if dumpRollbackPos != 0 {
+		if h.app.BinLogPosition < dumpRollbackPos {
+			h.app.BinLogPosition++
+			h.app.Logger.Debug(fmt.Sprintf("Binlog position for Dump process already synced, skipping: %d - %d", h.app.BinLogPosition, dumpRollbackPos))
+			return nil
+		}
+	}
+
 	// If the event is a dump event, increment the position by one
 	if h.app.BinLogFile == DumpStep {
 		h.app.BinLogPosition++
@@ -417,23 +251,6 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 	}
 
 	h.app.Logger.Debug(fmt.Sprintf("Syncing position %d in file: %s", h.app.BinLogPosition, h.app.BinLogFile))
-
-	// If a rollback is needed, skip the event and return the specific error
-	if h.app.RollbackNeeded {
-		return ErrRollback
-	}
-
-	// If rollback position is defined, skip the event if the position is lower than the rollback position
-	if h.app.RollBackPosition != 0 && h.app.RollBackFile != "" {
-		if h.app.BinLogPosition < h.app.RollBackPosition {
-			h.app.Logger.Debug(fmt.Sprintf("Skipping event %d for file: %s. Already synced",
-				h.app.BinLogPosition, h.app.BinLogFile))
-			return nil
-		}
-		// Clean up the rollback position after reach it
-		h.app.RollBackPosition = 0
-		h.app.RollBackFile = ""
-	}
 
 	// Filter database and table included in the configuration
 	if !watchEvent(h.app, e) {
@@ -476,23 +293,4 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 
 	return nil
 
-}
-
-// OnPosSynced is called when the position is synced (for example when mysqldump ends or there are no more events to sync)
-func (h *CanalEventHandler) OnPosSynced(header *replication.EventHeader, pos mysql.Position, set mysql.GTIDSet, force bool) error {
-
-	// If the event is in the DumpStep, it means that the dump process is finished. So, update the binlog position
-	// and file with the last position and file from the dump process.
-	if h.app.BinLogFile == DumpStep && pos.Name != "" {
-		h.app.BinLogFile = pos.Name
-		h.app.BinLogPosition = pos.Pos
-		h.app.Logger.Info("Dump finished successfully, updating binlog position and file")
-		return DumpFinished
-	}
-
-	if !reflect.ValueOf(header).IsZero() {
-		h.app.Logger.Debug(fmt.Sprintf("End of syncing position for server with id %d in pos-file: %d/%s", header.ServerID, pos.Pos, pos.Name))
-	}
-
-	return nil
 }

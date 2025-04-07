@@ -19,14 +19,14 @@ package sync
 import (
 	//
 	"context"
+	"fmt"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	coreLog "log"
 	"reflect"
 	"strings"
 	"time"
 
-	//
-	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 
 	//
@@ -102,19 +102,19 @@ func SyncCommand(cmd *cobra.Command, args []string) {
 	// If hashring is present, wait for the server list to be populated, any other case continue
 	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
 
+		app.Logger.Info(fmt.Sprintf("Setting up redis client to %s:%s", app.Config.Hashring.Redis.Host, app.Config.Hashring.Redis.Port))
+		app.RedisClient = redis.NewClient(&redis.Options{
+			Addr:        app.Config.Hashring.Redis.Host + ":" + app.Config.Hashring.Redis.Port,
+			Password:    app.Config.Hashring.Redis.Password,
+			DB:          0,
+			PoolSize:    10,
+			PoolTimeout: 120,
+		})
+
 		// Parse duration
 		syncTime, err := time.ParseDuration(app.Config.Hashring.SyncWorkerTime)
 		if err != nil {
 			app.Logger.Fatal("Error parsing duration", zap.Error(err))
-		}
-
-		// If confident mode is enabled, we need to set the redis client
-		if app.Config.Hashring.ConfidentMode.Enabled {
-			app.RedisClient = redis.NewClient(&redis.Options{
-				Addr:     app.Config.Hashring.ConfidentMode.Store.Host + ":" + app.Config.Hashring.ConfidentMode.Store.Port,
-				Password: app.Config.Hashring.ConfidentMode.Store.Password,
-				DB:       0, // use default DB
-			})
 		}
 
 		go hr.SyncWorker(&app, syncTime)
