@@ -10,9 +10,7 @@ metadata:
   {{- end }}
 spec:
   serviceName: {{ include "binwatch.fullname" . }}
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
       {{- include "binwatch.selectorLabels" . | nindent 6 }}
