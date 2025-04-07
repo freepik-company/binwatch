@@ -32,6 +32,17 @@ flow_control:
 # Hashring configuration
 hashring:
 
+  # Confident mode
+  # This mode stores the position of the binlog in a redis server to avoid losing events when a new node is added to the ring
+  confident_mode:
+    enabled: true
+
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      # password: "MiContrasenaSegura"
+      key_prefix: "binwatch"
+
   # Sync worker time to sync the ring nodes when a new node is added or removed from the ring
   sync_worker_time: 500ms
 
@@ -81,9 +92,9 @@ sources:
     # Start binlog position if you want to start reading from a specific position of binlog or mysqldump
     # Set file mysqldump if you want to start from a specific position in the mysqldump.
     # NOTE: mysqldump dumps in order of the primary key
-    start_position:
-      file: mysqldump
-      position: 4
+    # start_position:
+    #  file: mysqldump
+    #  position: 4
 
     # Mysqldump configuration for sync command. Just can dump an entire database, many databases or many tables for ONE database.
     # If many databases are specefied with tables, the tables will be ignored.
@@ -98,9 +109,9 @@ sources:
         - "--single-transaction"
       mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
       # Optional if you want to use a different mysql server for the mysqldump (e.g. for a slave)
-      host: 127.0.0.1
-      port: 3306
-      server_id: 101
+      # host: 127.0.0.1
+      # port: 3306
+      # server_id: 101
 
 # Data connectors configuration
 # List of connectors to send the data to

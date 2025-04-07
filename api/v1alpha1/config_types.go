@@ -27,6 +27,20 @@ type ConfigSpec struct {
 	FlowControl FlowControl      `yaml:"flow_control"`
 }
 
+// Confident
+type ConfidentConfig struct {
+	Enabled bool        `yaml:"enabled"`
+	Store   RedisConfig `yaml:"redis"`
+}
+
+// Store
+type RedisConfig struct {
+	Host      string `yaml:"host"`
+	Port      string `yaml:"port"`
+	Password  string `yaml:"password"`
+	KeyPrefix string `yaml:"key_prefix"`
+}
+
 // FlowControl
 type FlowControl struct {
 	Thresholds    []Thresholds `yaml:"thresholds"`
@@ -41,6 +55,7 @@ type Thresholds struct {
 
 // HashringConfig
 type HashringConfig struct {
+	ConfidentMode       ConfidentConfig        `yaml:"confident_mode"`
 	SyncWorkerTime      string                 `yaml:"sync_worker_time"`
 	APIPort             string                 `yaml:"api_port"`
 	DnsRingDiscovery    DnsDiscoveryRingConfig `yaml:"dns_ring_discovery"`

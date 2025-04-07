@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"cloud.google.com/go/pubsub"
 	"context"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"time"
 )
@@ -36,5 +37,6 @@ type Application struct {
 
 	// Carried stuff
 	PubsubClient map[string]*pubsub.Client
+	RedisClient  *redis.Client
 	SleepTime    time.Duration
 }

@@ -25,6 +25,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	//
@@ -91,7 +92,7 @@ func (h *HashRing) AddServer(app *v1alpha1.Application, server string) {
 
 	// If the server is different, get the binlog position from the server via HTTP request
 	if server != app.Config.ServerId {
-		binlogPosition, binLogFile, err := h.GetServerBinlogPosition(server)
+		binlogPosition, binLogFile, err := h.GetServerBinlogPosition(app, server)
 		if err != nil {
 			app.Logger.Error(fmt.Sprintf("Error getting binlog position for server %s", server), zap.Error(err))
 			// If there is an error getting the binlog position, use the current binlog position for this server
@@ -190,17 +191,28 @@ func (h *HashRing) SyncBinLogPositions(app *v1alpha1.Application) {
 	// Iterate over the binlog positions and update the binlog position for the server
 	for i, node := range h.binlogPositions {
 
+		// Do not save binlog position if the start position is 0
+		if app.BinLogPosition == 0 {
+			app.Logger.Debug(fmt.Sprintf("binlog position is 0 for server %s, not saving", node.Server))
+			continue
+		}
+
 		// If the server is the same as the current server, use the current binlog position
 		if node.Server == app.Config.ServerId {
 			app.Logger.Debug("syncing binlog positions for this server", zap.String("file", app.BinLogFile),
 				zap.Uint32("position", app.BinLogPosition))
 			h.binlogPositions[i].BinlogPosition = app.BinLogPosition
 			h.binlogPositions[i].BinlogFile = app.BinLogFile
+			if app.Config.Hashring.ConfidentMode.Enabled {
+				app.Logger.Debug("saving binlog position to memory store")
+				app.RedisClient.Set(app.Context, fmt.Sprintf("%s-%s", app.Config.Hashring.ConfidentMode.Store.KeyPrefix,
+					app.Config.ServerId), fmt.Sprintf("%s/%d", app.BinLogFile, app.BinLogPosition), 0)
+			}
 			continue
 		}
 
 		// If the server is different, get the binlog position from the server via HTTP
-		binlogPosition, binLogFile, err := h.GetServerBinlogPosition(node.Server)
+		binlogPosition, binLogFile, err := h.GetServerBinlogPosition(app, node.Server)
 		if err != nil {
 			app.Logger.Error(fmt.Sprintf("Error getting binlog position for server %s, using this server positions",
 				node.Server), zap.Error(err))
@@ -216,7 +228,31 @@ func (h *HashRing) SyncBinLogPositions(app *v1alpha1.Application) {
 }
 
 // GetServerBinlogPosition returns the binlog position for a given server via HTTP request
-func (h *HashRing) GetServerBinlogPosition(server string) (position uint32, file string, err error) {
+func (h *HashRing) GetServerBinlogPosition(app *v1alpha1.Application, server string) (position uint32, file string, err error) {
+
+	// If we are in confident mode, get the binlog position from the redis server
+	if app.Config.Hashring.ConfidentMode.Enabled {
+		result, err := app.RedisClient.Get(app.Context, fmt.Sprintf("%s-%s", app.Config.Hashring.ConfidentMode.Store.KeyPrefix,
+			server)).Result()
+		if err == nil {
+			// Split the result to get the file and position
+			parts := strings.Split(result, "/")
+			if len(parts) != 2 {
+				return position, file, fmt.Errorf("error parsing binlog position from memory store: %s", result)
+			}
+
+			position64, err := strconv.ParseUint(parts[1], 10, 32)
+			if err != nil {
+				return position, file, fmt.Errorf("error parsing binlog position from memory store: %s", err)
+			}
+
+			app.Logger.Debug(fmt.Sprintf("getting binlog position from memory store for server %s: %s/%s", server, parts[0], parts[1]))
+
+			return uint32(position64), parts[0], nil
+		}
+
+		app.Logger.Warn(fmt.Sprintf("error parsing binlog position from memory store: %s", result))
+	}
 
 	// Create the HTTP client
 	c := &http.Client{}
