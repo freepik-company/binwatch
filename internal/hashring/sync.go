@@ -137,6 +137,13 @@ func (h *HashRing) SyncWorker(app *v1alpha1.Application, syncTime time.Duration)
 			h.RemoveServer(server)
 		}
 
+		if app.BinLogPosition != 0 {
+			err := SetRedisLogPos(app)
+			if err != nil {
+				app.Logger.Error("Error setting binlog position to memory store", zap.Error(err))
+			}
+		}
+
 		time.Sleep(syncTime)
 	}
 }
