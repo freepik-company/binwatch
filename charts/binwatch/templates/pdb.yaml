@@ -20,7 +20,7 @@ spec:
     matchLabels:
       {{- include "binwatch.selectorLabels" . | nindent 6 }}
 
-{{- if .Values.highAvailabilityMode.enabled -}}
+{{ if .Values.highAvailabilityMode.enabled }}
 ---
 
 apiVersion: policy/v1
