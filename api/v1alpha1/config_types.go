@@ -118,8 +118,9 @@ type DumpConfig struct {
 
 // FilterTable
 type FilterTable struct {
-	Database string `yaml:"database"`
-	Table    string `yaml:"table"`
+	Database   string `yaml:"database"`
+	Table      string `yaml:"table"`
+	PrimaryKey string `yaml:"primary_key"`
 }
 
 // ConnectorsConfig

@@ -116,6 +116,7 @@ sources:
     filter_tables:
       - database: test
         table: test
+        primary_key: id
 
     # Start binlog position if you want to start reading from a specific position of binlog or mysqldump
     # Set file mysqldump if you want to start from a specific position in the mysqldump.
@@ -331,7 +332,8 @@ configMap:
           flavor: mysql
           filter_tables:
             - database: test
-              table: test    
+              table: test
+              primary_key: id
           dump_config:
               databases:
                 - test

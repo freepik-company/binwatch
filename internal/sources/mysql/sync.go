@@ -49,6 +49,7 @@ var (
 	binLogPos       uint32
 	binLogFile      string
 	jsonData        []byte
+	pk              string
 	// Initialize connectorsQueue and run workers for execute Connectors
 	connectorsQueue = &ConnectorsQueue{
 		queue: []QueueItems{},
@@ -247,23 +248,14 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 		h.app.BinLogPosition = e.Header.LogPos
 		syncedPos := h.canal.SyncedPosition()
 		h.app.BinLogFile = syncedPos.Name
-
 	}
 
 	h.app.Logger.Debug(fmt.Sprintf("Syncing position %d in file: %s", h.app.BinLogPosition, h.app.BinLogFile))
 
 	// Filter database and table included in the configuration
-	if !watchEvent(h.app, e) {
+	pkKey, watch := watchEvent(h.app, e)
+	if !watch {
 		return nil
-	}
-
-	// Check if the server assigned to the event is the current server in the hashring
-	if !reflect.ValueOf(h.app.Config.Hashring).IsZero() {
-		severAssigned := h.ring.GetServer(fmt.Sprintf("%d", h.app.BinLogPosition))
-		h.app.Logger.Debug(fmt.Sprintf("Server assigned: %s", severAssigned))
-		if h.app.Config.ServerId != severAssigned {
-			return nil
-		}
 	}
 
 	// Process the row event
@@ -271,9 +263,23 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 	if e.Action == canal.UpdateAction {
 		row = e.Rows[1]
 	}
-	jsonData, err = processRow(h.app, row, e.Table.Columns)
+	jsonData, pk, err = processRow(h.app, row, e.Table.Columns, pkKey)
 	if err != nil {
 		return fmt.Errorf("error processing row: %v", err)
+	}
+
+	// Check if the server assigned to the event is the current server in the hashring
+	if !reflect.ValueOf(h.app.Config.Hashring).IsZero() {
+		h.app.Logger.Debug(fmt.Sprintf("Primary key found: %s", pk))
+		severAssigned := h.ring.GetServer(fmt.Sprintf("%s", pk))
+		if severAssigned == "" {
+			severAssigned = h.app.Config.ServerId
+		}
+		h.app.Logger.Debug(fmt.Sprintf("Server assigned: %s", severAssigned))
+		if h.app.Config.ServerId != severAssigned {
+			h.app.Logger.Debug(fmt.Sprintf("Server not assigned, passing to the next event"))
+			return nil
+		}
 	}
 
 	// Add data to the queue
