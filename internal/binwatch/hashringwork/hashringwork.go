@@ -54,21 +54,12 @@ func (w *HashRingWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 					continue
 				}
 
-				if len(currentNodes) == len(nodes) {
-					slices.Sort(nodes)
-					updated := false
-					for ni := range nodes {
-						if currentNodes[ni] != nodes[ni] {
-							updated = true
-						}
-					}
-					if !updated {
-						log.Printf("INFO no updates in hashring")
-						continue
-					}
-				} else {
-					currentNodes = nodes
+				slices.Sort(nodes)
+				if slices.Equal(currentNodes, nodes) {
+					log.Printf("INFO no updates in hashring")
+					continue
 				}
+				currentNodes = nodes
 
 				w.ready.Store(false)
 				w.hr.Replace(currentNodes)
