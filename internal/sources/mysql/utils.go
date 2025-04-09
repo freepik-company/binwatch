@@ -33,6 +33,10 @@ import (
 	"binwatch/internal/connectors/webhook"
 )
 
+const (
+	DefaultPrimaryKey = "id"
+)
+
 // executeConnectors function to execute the connectors based on the configuration
 // This function is intended to be run as a goroutine
 func executeConnectors(app *v1alpha1.Application, connectorsQueue *ConnectorsQueue) {
@@ -99,7 +103,7 @@ func executeConnectors(app *v1alpha1.Application, connectorsQueue *ConnectorsQue
 }
 
 // processRow function to process the row event
-func processRow(app *v1alpha1.Application, row []interface{}, columns []schema.TableColumn) (jsonData []byte, err error) {
+func processRow(app *v1alpha1.Application, row []interface{}, columns []schema.TableColumn, pkKey string) (jsonData []byte, pk string, err error) {
 
 	// Map the row values to the column names
 	rowMap := make(map[string]interface{})
@@ -111,34 +115,40 @@ func processRow(app *v1alpha1.Application, row []interface{}, columns []schema.T
 		}
 	}
 
+	// Check the primary key and return the value
+	if pkKey == "" {
+		pkKey = DefaultPrimaryKey
+	}
+	pk = fmt.Sprintf("%v", rowMap[pkKey])
+
 	// Convert the row to JSON
 	jsonData, err = json.Marshal(rowMap)
 	if err != nil {
-		return jsonData, fmt.Errorf("error marshaling json data: %v", err)
+		return jsonData, pk, fmt.Errorf("error marshaling json data: %v", err)
 	}
 
 	// Print the JSON data
 	app.Logger.Debug("JSON data", zap.String("data", string(jsonData)))
 
-	return jsonData, nil
+	return jsonData, pk, nil
 }
 
 // watchEvent function to filter the events based on the configuration
-func watchEvent(app *v1alpha1.Application, ev *canal.RowsEvent) bool {
+func watchEvent(app *v1alpha1.Application, ev *canal.RowsEvent) (pkKey string, watch bool) {
 	// Filter database and table included in the configuration
 	// If no filters are defined, watch all tables
 	if len(app.Config.Sources.MySQL.FilterTables) == 0 {
-		return true
+		return "", true
 	}
 
 	// If filters are defined, check if the table is in the list
 	for _, pair := range app.Config.Sources.MySQL.FilterTables {
 		if pair.Database == ev.Table.Schema && pair.Table == ev.Table.Name {
-			return true
+			return pair.PrimaryKey, true
 		}
 	}
 
-	return false
+	return "", false
 }
 
 // calculateSleepTime function to calculate the sleep time between events in base of the queue size
