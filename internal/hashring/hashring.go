@@ -19,13 +19,14 @@ package hashring
 import (
 	//
 	"fmt"
-	"github.com/redis/go-redis/v9"
 	"hash/crc32"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/redis/go-redis/v9"
 
 	//
 	"binwatch/api/v1alpha1"
@@ -50,6 +51,16 @@ type Node struct {
 func NewHashRing(vnodesPerNode int) *HashRing {
 	return &HashRing{
 		vnodesPerNode: vnodesPerNode,
+	}
+}
+
+func (h *HashRing) Replace(servers []string) {
+	h.Lock()
+	defer h.Unlock()
+
+	h.nodes = []Node{}
+	for _, sv := range servers {
+		h.AddServer(sv)
 	}
 }
 
@@ -99,9 +110,11 @@ func (h *HashRing) GetServer(key string) string {
 	idx := sort.Search(len(h.nodes), func(i int) bool {
 		return h.nodes[i].hash >= hash
 	})
+
 	if idx == len(h.nodes) {
 		idx = 0
 	}
+
 	return h.nodes[idx].server
 }
 
