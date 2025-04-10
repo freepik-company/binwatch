@@ -18,23 +18,19 @@ package hashring
 
 import (
 	//
+	"encoding/json"
 	"fmt"
 	"hash/crc32"
 	"slices"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
-
-	"github.com/redis/go-redis/v9"
-
 	//
-	"binwatch/api/v1alpha1"
 )
 
 // HashRing is a consistent hashing implementation
 type HashRing struct {
-	sync.RWMutex
+	mu sync.RWMutex
 
 	//
 	nodes         []Node
@@ -55,8 +51,8 @@ func NewHashRing(vnodesPerNode int) *HashRing {
 }
 
 func (h *HashRing) Replace(servers []string) {
-	h.Lock()
-	defer h.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	h.nodes = []Node{}
 	for _, sv := range servers {
@@ -66,8 +62,8 @@ func (h *HashRing) Replace(servers []string) {
 
 // AddServer adds a server to the hash ring
 func (h *HashRing) AddServer(server string) {
-	h.Lock()
-	defer h.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	//
 	for i := 0; i < h.vnodesPerNode; i++ {
@@ -84,8 +80,8 @@ func (h *HashRing) AddServer(server string) {
 
 // RemoveServer removes a server from the hash ring
 func (h *HashRing) RemoveServer(server string) {
-	h.Lock()
-	defer h.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	//
 	var newNodes []Node
@@ -99,8 +95,8 @@ func (h *HashRing) RemoveServer(server string) {
 
 // GetServer returns the server for a given key
 func (h *HashRing) GetServer(key string) string {
-	h.RLock()
-	defer h.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	//
 	if len(h.nodes) == 0 {
@@ -122,8 +118,8 @@ func (h *HashRing) GetServer(key string) string {
 // This function is useful as servers can be defined by static configuration
 // or discovered by DNS
 func (h *HashRing) GetServerList() (servers []string) {
-	h.RLock()
-	defer h.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	//
 	numRealNodes := len(h.nodes)
@@ -160,36 +156,17 @@ func (h *HashRing) String() string {
 	return str
 }
 
-// GetRedisLogPos
-func GetRedisLogPos(app *v1alpha1.Application) (uint32, string, error) {
-	result, err := app.RedisClient.Get(app.Context, fmt.Sprintf("%s-%s", app.Config.Hashring.Redis.KeyPrefix,
-		app.Config.ServerId)).Result()
-	if err == redis.Nil {
-		app.Logger.Info(fmt.Sprintf("No binlog position found in memory store for server %s", app.Config.ServerId))
-		return 0, "", nil
-	}
+// JsonString returns a json string representation of the hashring
+func (h *HashRing) Json() []byte {
+	servers := h.GetServerList()
+	sj, err := json.Marshal(servers)
 	if err != nil {
-		return 0, "", fmt.Errorf("error getting binlog position from memory store: %s", err)
+		return []byte("[]")
 	}
-	app.Logger.Debug(fmt.Sprintf("Redis position from memory store: %s: %s", fmt.Sprintf("%s-%s", app.Config.Hashring.Redis.KeyPrefix,
-		app.Config.ServerId), result))
 
-	// Split the result to get the file and position
-	parts := strings.Split(result, "/")
-	if len(parts) != 2 {
-		return 0, "", fmt.Errorf("error parsing binlog position from memory store: %s", result)
-	}
-	position64, err := strconv.ParseUint(parts[1], 10, 32)
-	if err != nil {
-		return 0, "", fmt.Errorf("error parsing binlog position from memory store: %s", err)
-	}
-	app.Logger.Debug(fmt.Sprintf("getting binlog position from memory store for server %s: %s/%s", app.Config.ServerId, parts[0], parts[1]))
-	return uint32(position64), parts[0], nil
+	return sj
 }
 
-// SetRedisLogPos
-func SetRedisLogPos(app *v1alpha1.Application) error {
-	err := app.RedisClient.Set(app.Context, fmt.Sprintf("%s-%s", app.Config.Hashring.Redis.KeyPrefix,
-		app.Config.ServerId), fmt.Sprintf("%s/%d", app.BinLogFile, app.BinLogPosition), 0).Err()
-	return err
+func (h *HashRing) JsonString() string {
+	return string(h.Json())
 }
