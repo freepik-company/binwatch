@@ -19,12 +19,19 @@ package v1alpha1
 // ConfigSpec
 type ConfigSpec struct {
 	Logger      LoggerConfig     `yaml:"logger"`
+	Server      ServerT          `yaml:"server"`
+	Redis       RedisConfig      `yaml:"redis"`
 	Sources     SourcesConfig    `yaml:"sources"`
 	Connectors  ConnectorsConfig `yaml:"connectors"`
 	Hashring    HashringConfig   `yaml:"hashring"`
-	ServerId    string           `yaml:"server_id"`
 	MaxWorkers  string           `yaml:"max_workers"`
 	FlowControl FlowControl      `yaml:"flow_control"`
+}
+
+type ServerT struct {
+	ID   string `yaml:"id"`
+	Host string `yaml:"host"`
+	Port uint32 `yaml:"port"`
 }
 
 // Confident
@@ -35,6 +42,7 @@ type ConfidentConfig struct {
 
 // Store
 type RedisConfig struct {
+	Enabled   bool   `yaml:"enabled"`
 	Host      string `yaml:"host"`
 	Port      string `yaml:"port"`
 	Password  string `yaml:"password"`
@@ -55,9 +63,8 @@ type Thresholds struct {
 
 // HashringConfig
 type HashringConfig struct {
-	Redis               RedisConfig            `yaml:"redis"`
+	Enabled             bool                   `yaml:"enabled"`
 	SyncWorkerTime      string                 `yaml:"sync_worker_time"`
-	APIPort             string                 `yaml:"api_port"`
 	DnsRingDiscovery    DnsDiscoveryRingConfig `yaml:"dns_ring_discovery"`
 	StaticRingDiscovery StaticRingConfig       `yaml:"static_ring_discovery"`
 }
