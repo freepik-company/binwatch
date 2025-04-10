@@ -105,10 +105,10 @@ func Sync(app *v1alpha1.Application, ring *hashring.HashRing) {
 
 	// If hashring is configured, get the current position from the memory cache
 	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
-		binlogPosition.Pos, binlogPosition.Name, err = hashring.GetRedisLogPos(app)
-		if err != nil {
-			app.Logger.Fatal("Error getting minimal binlog position", zap.Error(err))
-		}
+		// binlogPosition.Pos, binlogPosition.Name, err = hashring.GetRedisLogPos(app)
+		// if err != nil {
+		// 	app.Logger.Fatal("Error getting minimal binlog position", zap.Error(err))
+		// }
 
 		app.Logger.Info(fmt.Sprintf("Binlog position detected from memory store %s/%d", binlogPosition.Name, binlogPosition.Pos))
 		if binlogPosition.Name == DumpStep {
@@ -261,7 +261,7 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 	if !reflect.ValueOf(h.app.Config.Hashring).IsZero() {
 		severAssigned := h.ring.GetServer(fmt.Sprintf("%d", h.app.BinLogPosition))
 		h.app.Logger.Debug(fmt.Sprintf("Server assigned: %s", severAssigned))
-		if h.app.Config.ServerId != severAssigned {
+		if h.app.Config.Server.ID != severAssigned {
 			return nil
 		}
 	}
