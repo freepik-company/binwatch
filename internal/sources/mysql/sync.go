@@ -267,24 +267,27 @@ func (h *CanalEventHandler) OnRow(e *canal.RowsEvent) error {
 	}
 
 	// Process the row event
-	row := e.Rows[0]
-	if e.Action == canal.UpdateAction {
-		row = e.Rows[1]
-	}
-	jsonData, err = processRow(h.app, row, e.Table.Columns)
-	if err != nil {
-		return fmt.Errorf("error processing row: %v", err)
-	}
+	for idx, row := range e.Rows {
+		// If the action is update and the row is even, skip it
+		if e.Action == canal.UpdateAction && idx%2 == 0 {
+			continue
+		}
 
-	// Add data to the queue
-	h.connectorsQueue.mutex.Lock()
-	defer h.connectorsQueue.mutex.Unlock()
-	h.connectorsQueue.queue = append(h.connectorsQueue.queue, QueueItems{
-		eventType:     e.Action,
-		eventTable:    e.Table.Name,
-		eventDatabase: e.Table.Schema,
-		data:          jsonData,
-	})
+		jsonData, err = processRow(h.app, row, e.Table.Columns)
+		if err != nil {
+			return fmt.Errorf("error processing row: %v", err)
+		}
+
+		// Add data to the queue
+		h.connectorsQueue.mutex.Lock()
+		h.connectorsQueue.queue = append(h.connectorsQueue.queue, QueueItems{
+			eventType:     e.Action,
+			eventTable:    e.Table.Name,
+			eventDatabase: e.Table.Schema,
+			data:          jsonData,
+		})
+		h.connectorsQueue.mutex.Unlock()
+	}
 
 	// Calculate conenctorsQueue size and sleep time if needed
 	queueSize := len(h.connectorsQueue.queue)
