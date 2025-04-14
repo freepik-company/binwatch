@@ -1,32 +1,15 @@
-/*
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-package template
+package tmpl
 
 import (
-	//
 	"bytes"
 	"encoding/json"
+	"maps"
 	"strings"
 	"text/template"
 
-	//
 	"github.com/BurntSushi/toml"
-	"github.com/Masterminds/sprig/v3"
-	"gopkg.in/yaml.v3"
+	"github.com/Masterminds/sprig"
+	"sigs.k8s.io/yaml"
 )
 
 // FOLKS, ATTENTION HERE:
@@ -35,33 +18,20 @@ import (
 // for people who are already comfortable with Helm. Not all the extra functionality was added to keep this simpler.
 // Ref: https://github.com/helm/helm/blob/main/pkg/engine/funcs.go
 
-func EvaluateTemplate(templateString string, data interface{}) (result string, err error) {
-	templateFunctionsMap := GetFunctionsMap()
-
+func NewTemplate(name, tmplStr string) (tmpl *template.Template, err error) {
+	extraFuncs := getExtraFuncMap()
 	// Create a Template object from the given string
-	parsedTemplate, err := template.New("main").Funcs(templateFunctionsMap).Parse(templateString)
-	if err != nil {
-		return result, err
-	}
-
-	// Create a new buffer to store the templating result
-	buffer := new(bytes.Buffer)
-
-	err = parsedTemplate.Execute(buffer, data)
-	if err != nil {
-		return result, err
-	}
-
-	return buffer.String(), nil
+	tmpl, err = template.New(name).Funcs(extraFuncs).Parse(tmplStr)
+	return tmpl, err
 }
 
 // GetFunctionsMap return a map with equivalency between functions for inside templating and real Golang ones
-func GetFunctionsMap() template.FuncMap {
+func getExtraFuncMap() template.FuncMap {
 	f := sprig.TxtFuncMap()
 
 	// Delete risky functions
 	// Ref: http://masterminds.github.io/sprig/os.html
-	delete(f, "env")
+	// delete(f, "env") // IMPORTANT: i disable this to allow get env vars, but still here the comment to documentation propuses
 	delete(f, "expandenv")
 
 	// Add some extra functionality
@@ -75,9 +45,7 @@ func GetFunctionsMap() template.FuncMap {
 		"fromJsonArray": fromJSONArray,
 	}
 
-	for k, v := range extra {
-		f[k] = v
-	}
+	maps.Copy(f, extra)
 
 	return f
 }
@@ -86,7 +54,7 @@ func GetFunctionsMap() template.FuncMap {
 // always return a string, even on marshal error (empty string).
 //
 // This is designed to be called from a template.
-func toYAML(v interface{}) string {
+func toYAML(v any) string {
 	data, err := yaml.Marshal(v)
 	if err != nil {
 		// Swallow errors inside of a template.
@@ -95,14 +63,14 @@ func toYAML(v interface{}) string {
 	return strings.TrimSuffix(string(data), "\n")
 }
 
-// fromYAML converts a YAML document into a map[string]interface{}.
+// fromYAML converts a YAML document into a map[string]any.
 //
 // This is not a general-purpose YAML parser, and will not parse all valid
 // YAML documents. Additionally, because its intended use is within templates
 // it tolerates errors. It will insert the returned error message string into
 // m["Error"] in the returned map.
-func fromYAML(str string) map[string]interface{} {
-	m := map[string]interface{}{}
+func fromYAML(str string) map[string]any {
+	m := map[string]any{}
 
 	if err := yaml.Unmarshal([]byte(str), &m); err != nil {
 		m["Error"] = err.Error()
@@ -110,17 +78,17 @@ func fromYAML(str string) map[string]interface{} {
 	return m
 }
 
-// fromYAMLArray converts a YAML array into a []interface{}.
+// fromYAMLArray converts a YAML array into a []any.
 //
 // This is not a general-purpose YAML parser, and will not parse all valid
 // YAML documents. Additionally, because its intended use is within templates
 // it tolerates errors. It will insert the returned error message string as
 // the first and only item in the returned array.
-func fromYAMLArray(str string) []interface{} {
-	a := []interface{}{}
+func fromYAMLArray(str string) []any {
+	a := []any{}
 
 	if err := yaml.Unmarshal([]byte(str), &a); err != nil {
-		a = []interface{}{err.Error()}
+		a = []any{err.Error()}
 	}
 	return a
 }
@@ -129,7 +97,7 @@ func fromYAMLArray(str string) []interface{} {
 // always return a string, even on marshal error (empty string).
 //
 // This is designed to be called from a template.
-func toTOML(v interface{}) string {
+func toTOML(v any) string {
 	b := bytes.NewBuffer(nil)
 	e := toml.NewEncoder(b)
 	err := e.Encode(v)
@@ -143,7 +111,7 @@ func toTOML(v interface{}) string {
 // always return a string, even on marshal error (empty string).
 //
 // This is designed to be called from a template.
-func toJSON(v interface{}) string {
+func toJSON(v any) string {
 	data, err := json.Marshal(v)
 	if err != nil {
 		// Swallow errors inside of a template.
@@ -152,14 +120,14 @@ func toJSON(v interface{}) string {
 	return string(data)
 }
 
-// fromJSON converts a JSON document into a map[string]interface{}.
+// fromJSON converts a JSON document into a map[string]any.
 //
 // This is not a general-purpose JSON parser, and will not parse all valid
 // JSON documents. Additionally, because its intended use is within templates
 // it tolerates errors. It will insert the returned error message string into
 // m["Error"] in the returned map.
-func fromJSON(str string) map[string]interface{} {
-	m := make(map[string]interface{})
+func fromJSON(str string) map[string]any {
+	m := make(map[string]any)
 
 	if err := json.Unmarshal([]byte(str), &m); err != nil {
 		m["Error"] = err.Error()
@@ -167,17 +135,17 @@ func fromJSON(str string) map[string]interface{} {
 	return m
 }
 
-// fromJSONArray converts a JSON array into a []interface{}.
+// fromJSONArray converts a JSON array into a []any.
 //
 // This is not a general-purpose JSON parser, and will not parse all valid
 // JSON documents. Additionally, because its intended use is within templates
 // it tolerates errors. It will insert the returned error message string as
 // the first and only item in the returned array.
-func fromJSONArray(str string) []interface{} {
-	a := []interface{}{}
+func fromJSONArray(str string) []any {
+	a := []any{}
 
 	if err := json.Unmarshal([]byte(str), &a); err != nil {
-		a = []interface{}{err.Error()}
+		a = []any{err.Error()}
 	}
 	return a
 }

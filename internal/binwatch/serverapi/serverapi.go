@@ -7,37 +7,38 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"binwatch/api/v1alpha1"
-	"binwatch/internal/hashring"
+	"binwatch/api/v1alpha2"
 	"binwatch/internal/logger"
+	"binwatch/internal/utils"
+)
+
+const (
+	componentName = "API"
+
+	EndpointPathHealthz     = "/healthz"
+	EndpointPathAPIV1Server = "/api/v1/server"
 )
 
 type ServerAPIT struct {
-	log     logger.LoggerT
-	cfg     *v1alpha1.ConfigSpec
-	hr      *hashring.HashRing
-	hrReady *atomic.Bool
+	log logger.LoggerT
+	cfg *v1alpha2.ConfigT
 
 	server *http.Server
 }
 
-func NewBinWatchApi(cfg *v1alpha1.ConfigSpec, hr *hashring.HashRing, hrReady *atomic.Bool) (a *ServerAPIT, err error) {
+func NewBinWatchApi(cfg *v1alpha2.ConfigT) (a *ServerAPIT, err error) {
 	a = &ServerAPIT{
-		log:     logger.NewLogger(logger.GetLevel(cfg.Logger.Level)),
-		cfg:     cfg,
-		hr:      hr,
-		hrReady: hrReady,
+		log: logger.NewLogger(logger.GetLevel(cfg.Logger.Level)),
+		cfg: cfg,
 	}
 
 	mux := http.NewServeMux()
 
 	// Endpoints
-	mux.HandleFunc("/healthz", a.getHealthz)
-	mux.HandleFunc("/hashring", a.getHashring)
-	mux.HandleFunc("/server", a.getServer)
+	mux.HandleFunc(EndpointPathHealthz, a.getHealthz)
+	mux.HandleFunc(EndpointPathAPIV1Server, a.getServer)
 
 	a.server = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", a.cfg.Server.Host, a.cfg.Server.Port),
@@ -52,7 +53,7 @@ func NewBinWatchApi(cfg *v1alpha1.ConfigSpec, hr *hashring.HashRing, hrReady *at
 
 func (a *ServerAPIT) Run(wg *sync.WaitGroup, ctx context.Context) {
 	defer wg.Done()
-	extra := logger.ExtraFieldsT{"component": "API"}
+	extra := utils.GetBasicLogExtraFields(componentName)
 
 	go func() {
 		<-ctx.Done()
@@ -87,42 +88,8 @@ func (a *ServerAPIT) getHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-func (a *ServerAPIT) getHashring(w http.ResponseWriter, r *http.Request) {
-	data := []byte("KO")
-	if r.Method != http.MethodGet {
-		w.Header().Set("Content-Type", "text/plain")
-		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		w.Write(data)
-		return
-	}
-
-	if !a.cfg.Hashring.Enabled {
-		data := []byte("DISABLED")
-		w.Header().Set("Content-Type", "text/plain")
-		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-		w.WriteHeader(http.StatusOK)
-		w.Write(data)
-		return
-	}
-
-	if !a.hrReady.Load() {
-		w.Header().Set("Content-Type", "text/plain")
-		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write(data)
-		return
-	}
-
-	data = a.hr.Json()
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	w.WriteHeader(http.StatusOK)
-	w.Write(data)
-}
-
 func (a *ServerAPIT) getServer(w http.ResponseWriter, r *http.Request) {
-	extra := logger.ExtraFieldsT{"component": "API"}
+	extra := utils.GetBasicLogExtraFields(componentName)
 
 	data := []byte("KO")
 	if r.Method != http.MethodGet {

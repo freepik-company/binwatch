@@ -23,6 +23,8 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
+	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
+	github.com/alecthomas/repr v0.4.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -35,6 +37,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
+	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
@@ -70,4 +73,5 @@ require (
 	google.golang.org/grpc v1.70.0 // indirect
 	google.golang.org/protobuf v1.36.4 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
+	sigs.k8s.io/yaml v1.4.0 // indirect
 )
