@@ -1,7 +1,7 @@
 package managers
 
 import (
-	"binwatch/api/v1alpha1"
+	"binwatch/api/v1alpha2"
 	"context"
 	"fmt"
 	"strconv"
@@ -16,13 +16,13 @@ type RedisManT struct {
 	key string
 }
 
-func NewRedisMan(cfg *v1alpha1.ConfigSpec) (m *RedisManT, err error) {
+func NewRedisMan(cfg *v1alpha2.ServerT) (m *RedisManT, err error) {
 	m = &RedisManT{
-		key: fmt.Sprintf("%s-%s", cfg.Redis.KeyPrefix, cfg.Server.ID),
+		key: fmt.Sprintf("%s-%s", cfg.Cache.KeyPrefix, cfg.ID),
 	}
 	m.cli = redis.NewClient(&redis.Options{
-		Addr:        cfg.Redis.Host + ":" + cfg.Redis.Port,
-		Password:    cfg.Redis.Password,
+		Addr:        fmt.Sprintf("%s:%d", cfg.Cache.Host, cfg.Cache.Port),
+		Password:    cfg.Cache.Password,
 		DB:          0,
 		PoolSize:    10,
 		PoolTimeout: 120,

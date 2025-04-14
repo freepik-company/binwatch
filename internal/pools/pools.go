@@ -1,86 +1,85 @@
 package pools
 
 import (
+	"context"
 	"encoding/json"
-	"maps"
-	"strings"
+	"fmt"
 	"sync"
 )
 
-type ConnectorsQueuePoolT struct {
-	mu    sync.RWMutex
-	queue map[string]QueueItems
-	size  int
+type RowEventPoolT struct {
+	mu      sync.Mutex
+	items   chan *RowEventItemT
+	counter int
 }
 
-type QueueItems struct {
-	EventType     string `json:"eventType"`
-	EventTable    string `json:"eventTable"`
-	EventDatabase string `json:"eventDatabase"`
-	Data          []byte `json:"data"`
+type RowEventItemT struct {
+	PoolID int `json:"poolID"`
+
+	EventType string           `json:"eventType"`
+	Location  RowEventItemPosT `json:"location"`
+
+	Database string  `json:"database"`
+	Table    string  `json:"table"`
+	Action   string  `json:"action"`
+	Rows     [][]any `json:"rows"`
 }
 
-func NewConnectorsQueuePool() *ConnectorsQueuePoolT {
-	return &ConnectorsQueuePoolT{
-		queue: map[string]QueueItems{},
+type RowEventItemPosT struct {
+	File     string `json:"file"`
+	Position uint64 `json:"position"`
+}
+
+// POOL FUNCTIONS
+
+func NewRowEventPool(poolSize int) *RowEventPoolT {
+	return &RowEventPoolT{
+		items: make(chan *RowEventItemT, poolSize),
 	}
 }
 
-// SERVER POOL FUNCTIONS
-
-func (p *ConnectorsQueuePoolT) GetCopy() (result map[string]QueueItems) {
-	result = map[string]QueueItems{}
-
-	p.mu.Lock()
-	maps.Copy(result, p.queue)
-	p.mu.Unlock()
-
-	return result
+func (p *RowEventPoolT) Get(ctx context.Context) (*RowEventItemT, error) {
+	select {
+	case item := <-p.items:
+		return item, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
-func (p *ConnectorsQueuePoolT) Add(queue QueueItems) {
+func (p *RowEventPoolT) Prepare(item *RowEventItemT) error {
 	p.mu.Lock()
-	p.queue[queue.GetKey()] = queue
-	p.size++
+	item.PoolID = p.counter + 1
 	p.mu.Unlock()
+
+	return nil
 }
 
-func (p *ConnectorsQueuePoolT) Size() (s int) {
+func (p *RowEventPoolT) Add(ctx context.Context, item *RowEventItemT) error {
 	p.mu.Lock()
-	s = p.size
-	p.mu.Unlock()
-	return s
-}
-
-func (p *ConnectorsQueuePoolT) Remove(key string) {
-	p.mu.Lock()
-	if p.size == 0 {
+	nextID := p.counter + 1
+	if nextID-item.PoolID != 0 {
 		p.mu.Unlock()
-		return
+		return fmt.Errorf("invalid '%d' item id, next item id must be '%d'", item.PoolID, nextID)
 	}
-
-	delete(p.queue, key)
-	p.size--
+	p.counter++
 	p.mu.Unlock()
+
+	select {
+	case p.items <- item:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
-func (p *ConnectorsQueuePoolT) RemoveQueues(queues []QueueItems) {
-	p.mu.Lock()
-	for _, q := range queues {
-		delete(p.queue, q.GetKey())
-	}
-	p.mu.Unlock()
-}
+// ITEM POOL FUNCTIONS
 
-func (q *QueueItems) String() string {
-	result, err := json.Marshal(q)
+func (i *RowEventItemT) String() string {
+	result, err := json.Marshal(i)
 	if err != nil {
 		return "<nil>"
 	}
 
 	return string(result)
-}
-
-func (q *QueueItems) GetKey() string {
-	return strings.Join([]string{q.EventDatabase, q.EventTable, q.EventType}, ".")
 }
