@@ -42,11 +42,12 @@ type LoggerT struct {
 
 // ServerT
 type ServerT struct {
-	ID    string       `yaml:"id"`
-	Host  string       `yaml:"host"`
-	Port  uint32       `yaml:"port"`
-	Pool  ServerPoolT  `yaml:"pool"`
-	Cache ServerCacheT `yaml:"cache"`
+	ID          string       `yaml:"id"`
+	Host        string       `yaml:"host"`
+	Port        uint32       `yaml:"port"`
+	StopInError bool         `yaml:"stopInError"`
+	Pool        ServerPoolT  `yaml:"pool"`
+	Cache       ServerCacheT `yaml:"cache"`
 }
 
 type ServerPoolT struct {
