@@ -9,6 +9,7 @@ import (
 	"text/template"
 
 	"binwatch/api/v1alpha2"
+	"binwatch/internal/cache"
 	"binwatch/internal/connectors"
 	"binwatch/internal/logger"
 	"binwatch/internal/pools"
@@ -25,6 +26,7 @@ type BLSenderWorkT struct {
 	cfg *v1alpha2.ConfigT
 
 	rePool *pools.RowEventPoolT
+	cach   cache.CacheI
 	conns  map[string]connectors.ConnectorI
 	routs  []routeT
 }
@@ -32,17 +34,18 @@ type BLSenderWorkT struct {
 type routeT struct {
 	name string
 	conn string
-	acts []string
+	ops  []string
 	tmpl *template.Template
 }
 
-func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT) (w *BLSenderWorkT, err error) {
+func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cach cache.CacheI) (w *BLSenderWorkT, err error) {
 	w = &BLSenderWorkT{
 		log: logger.NewLogger(logger.GetLevel(cfg.Logger.Level)),
 		cfg: cfg,
 
 		rePool: rePool,
 		conns:  make(map[string]connectors.ConnectorI),
+		cach:   cach,
 	}
 
 	for _, connv := range cfg.Connectors {
@@ -57,7 +60,7 @@ func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT) (w 
 		rt := routeT{
 			name: rtv.Name,
 			conn: rtv.Connector,
-			acts: rtv.Actions,
+			ops:  rtv.Operations,
 		}
 
 		if _, ok := w.conns[rt.conn]; !ok {
@@ -93,33 +96,46 @@ func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 			{
 				var err error
 				var item *pools.RowEventItemT
+				extra.Del("event")
 
 				item, err = w.rePool.Get(ctx)
 				if err != nil {
-					w.log.Error("error getting item from pool", extra, err)
+					if err != context.Canceled {
+						w.log.Error("error getting item from pool", extra, err)
+					}
 					continue
 				}
-
-				extra.Set("currentItem", item)
-				w.log.Debug("send item to connector", extra)
-				extra.Del("currentItem")
+				extra.Set("event", item)
 
 				for ri := range w.routs {
-					if slices.Contains(w.routs[ri].acts, item.Action) {
+					if slices.Contains(w.routs[ri].ops, item.Data.Operation) {
 						buffer := new(bytes.Buffer)
 						err = w.routs[ri].tmpl.Execute(buffer, item)
 						if err != nil {
 							w.log.Error("error executing template in pool item", extra, err)
-							continue
+							break
 						}
 
 						err = w.conns[w.routs[ri].conn].Send(buffer.Bytes())
 						if err != nil {
 							w.log.Error("error sending data to connector", extra, err)
-							continue
+							break
 						}
 					}
 				}
+				if err != nil {
+					continue
+				}
+
+				err = w.cach.Store(cache.BinlogLocation{
+					File:     item.Log.BinlogFile,
+					Position: uint32(item.Log.BinlogPosition),
+				})
+				if err != nil {
+					continue
+				}
+
+				w.log.Info("success sending event to connector", extra)
 			}
 		}
 	}

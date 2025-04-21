@@ -45,16 +45,32 @@ type ServerT struct {
 	ID    string       `yaml:"id"`
 	Host  string       `yaml:"host"`
 	Port  uint32       `yaml:"port"`
+	Pool  ServerPoolT  `yaml:"pool"`
 	Cache ServerCacheT `yaml:"cache"`
+}
+
+type ServerPoolT struct {
+	Size uint32 `yaml:"size"`
 }
 
 // ServerCacheT
 type ServerCacheT struct {
-	Enabled   bool   `yaml:"enabled"`
-	Host      string `yaml:"host"`
-	Port      uint32 `yaml:"port"`
-	Password  string `yaml:"password"`
-	KeyPrefix string `yaml:"keyPrefix"`
+	Enabled bool              `yaml:"enabled"`
+	Type    string            `yaml:"type"` // values: local|redis
+	Local   ServerCacheLocalT `yaml:"local"`
+	Redis   ServerCacheRedisT `yaml:"redis"`
+}
+
+// ServerCacheLocalT
+type ServerCacheLocalT struct {
+	Path string `yaml:"path"`
+}
+
+// ServerCacheRedisT
+type ServerCacheRedisT struct {
+	Host     string `yaml:"host"`
+	Port     uint32 `yaml:"port"`
+	Password string `yaml:"password"`
 }
 
 /*
@@ -63,22 +79,21 @@ type ServerCacheT struct {
 
 // SourceT
 type SourceT struct {
-	Flavor   string   `yaml:"flavor"`
-	ServerID uint32   `yaml:"serverID"`
-	Host     string   `yaml:"host"`
-	Port     uint32   `yaml:"port"`
-	User     string   `yaml:"user"`
-	Password string   `yaml:"password"`
-	Database string   `yaml:"database"`
-	Tables   []string `yaml:"tables"`
+	Flavor   string              `yaml:"flavor"`
+	ServerID uint32              `yaml:"serverID"`
+	Host     string              `yaml:"host"`
+	Port     uint32              `yaml:"port"`
+	User     string              `yaml:"user"`
+	Password string              `yaml:"password"`
+	DBTables map[string][]string `yaml:"dbTables"`
 
 	ReadTimeout     time.Duration `yaml:"readTimeout"`
 	HeartbeatPeriod time.Duration `yaml:"heartbeatPeriod"`
-	StartPosition   StartPosition `yaml:"startPosition"`
+	StartLocation   LocationT     `yaml:"startLocation"`
 }
 
-// StartPosition
-type StartPosition struct {
+// LocationT
+type LocationT struct {
 	File     string `yaml:"file"`
 	Position uint32 `yaml:"position"`
 }
@@ -121,8 +136,8 @@ type ConnectorWebhookCredentialsT struct {
  */
 
 type RouteT struct {
-	Name      string   `yaml:"name"`
-	Actions   []string `yaml:"actions"`
-	Connector string   `yaml:"connector"`
-	Template  string   `yaml:"template"`
+	Name       string   `yaml:"name"`
+	Operations []string `yaml:"operations"`
+	Connector  string   `yaml:"connector"`
+	Template   string   `yaml:"template"`
 }

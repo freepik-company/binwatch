@@ -11,6 +11,7 @@ import (
 
 	"binwatch/api/v1alpha2"
 	"binwatch/internal/logger"
+	"binwatch/internal/pools"
 	"binwatch/internal/utils"
 )
 
@@ -25,13 +26,16 @@ type ServerAPIT struct {
 	log logger.LoggerT
 	cfg *v1alpha2.ConfigT
 
+	rePool *pools.RowEventPoolT
 	server *http.Server
 }
 
-func NewBinWatchApi(cfg *v1alpha2.ConfigT) (a *ServerAPIT, err error) {
+func NewBinWatchApi(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT) (a *ServerAPIT, err error) {
 	a = &ServerAPIT{
 		log: logger.NewLogger(logger.GetLevel(cfg.Logger.Level)),
 		cfg: cfg,
+
+		rePool: rePool,
 	}
 
 	mux := http.NewServeMux()
@@ -102,9 +106,10 @@ func (a *ServerAPIT) getServer(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	server := map[string]any{
-		"id":   a.cfg.Server.ID,
-		"host": a.cfg.Server.Host,
-		"port": a.cfg.Server.Port,
+		"id":       a.cfg.Server.ID,
+		"host":     a.cfg.Server.Host,
+		"port":     a.cfg.Server.Port,
+		"poolSize": a.rePool.Size(),
 	}
 	data, err = json.Marshal(server)
 	if err != nil {
