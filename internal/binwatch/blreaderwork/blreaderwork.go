@@ -75,12 +75,7 @@ func NewBinlogReaderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cac
 
 	// Get BINLOG position
 
-	if !reflect.ValueOf(w.cfg.Source.StartLocation).IsZero() {
-		w.mysql.blLoc = mysql.Position{
-			Name: w.cfg.Source.StartLocation.File,
-			Pos:  w.cfg.Source.StartLocation.Position,
-		}
-	} else if w.cfg.Server.Cache.Enabled {
+	if w.cfg.Server.Cache.Enabled {
 		var blLoc cache.BinlogLocation
 		blLoc, err = w.cach.Load()
 		if err != nil {
@@ -89,6 +84,13 @@ func NewBinlogReaderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cac
 		w.mysql.blLoc = mysql.Position{
 			Name: blLoc.File,
 			Pos:  blLoc.Position,
+		}
+	}
+
+	if !reflect.ValueOf(w.cfg.Source.StartLocation).IsZero() {
+		w.mysql.blLoc = mysql.Position{
+			Name: w.cfg.Source.StartLocation.File,
+			Pos:  w.cfg.Source.StartLocation.Position,
 		}
 	}
 
@@ -116,9 +118,12 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 
 	w.mysql.blStream, err = w.mysql.blSyncer.StartSync(w.mysql.blLoc)
 	if err != nil {
-		w.log.Fatal("unable to start syncer", extra, err)
+		w.log.Error("unable to start syncer", extra, err, true)
 	}
 
+	extra.Set("location", w.mysql.blLoc)
+	w.log.Info("start sync process", extra)
+	extra.Del("location")
 	runWorker := true
 	for runWorker {
 		select {
@@ -135,7 +140,7 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 				e, err = w.mysql.blStream.GetEvent(ctx)
 				if err != nil {
 					if err != context.Canceled {
-						w.log.Fatal("error in get binlog event", extra, err)
+						w.log.Error("error in get binlog event", extra, err, w.cfg.Server.StopInError)
 					}
 					continue
 				}
@@ -156,13 +161,15 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 							},
 						}
 
-						err = w.cach.Store(cache.BinlogLocation{
-							File:     item.Log.BinlogFile,
-							Position: uint32(item.Log.BinlogPosition),
-						})
-						if err != nil {
-							w.log.Error("error rotating binlog file location", extra, err)
-							continue
+						if w.cfg.Server.Cache.Enabled {
+							err = w.cach.Store(cache.BinlogLocation{
+								File:     item.Log.BinlogFile,
+								Position: uint32(item.Log.BinlogPosition),
+							})
+							if err != nil {
+								w.log.Error("error rotating binlog file location", extra, err, w.cfg.Server.StopInError)
+								continue
+							}
 						}
 
 						extra.Set("event", item)
@@ -192,7 +199,9 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 						rowi := 0
 						for ri := range re.Rows {
 							if len(w.mysql.colNames[colNamesKey]) != len(re.Rows[ri]) {
-								w.log.Fatal("number of columns mismatch in row", extra, fmt.Errorf("the table %s has %d columns but binlog have %d", colNamesKey, len(w.mysql.colNames[colNamesKey]), len(re.Rows[ri])))
+								err = fmt.Errorf("the table %s has %d columns but binlog have %d", colNamesKey, len(w.mysql.colNames[colNamesKey]), len(re.Rows[ri]))
+								w.log.Error("number of columns mismatch in row", extra, err, w.cfg.Server.StopInError)
+								break
 							}
 
 							if item.Data.Operation == utils.DMLOperationUpdate && ri%2 == 0 {
@@ -204,6 +213,9 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 								item.Data.Rows[rowi][cv] = re.Rows[ri][ci]
 							}
 							rowi++
+						}
+						if err != nil {
+							continue
 						}
 
 						w.rePool.Prepare(item)

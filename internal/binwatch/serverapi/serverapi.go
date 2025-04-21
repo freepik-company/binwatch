@@ -64,14 +64,14 @@ func (a *ServerAPIT) Run(wg *sync.WaitGroup, ctx context.Context) {
 
 		a.log.Info("execution cancelled", extra)
 		if err := a.server.Shutdown(ctx); err != nil {
-			a.log.Error("error in shutdown execution", extra, err)
+			a.log.Error("error in shutdown execution", extra, err, false)
 		}
 	}()
 
 	extra.Set("serve", a.server.Addr)
 	a.log.Info("init API", extra)
 	if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		a.log.Error("error in API execution", extra, err)
+		a.log.Error("error in API execution", extra, err, false)
 	}
 }
 
@@ -119,7 +119,7 @@ func (a *ServerAPIT) getServer(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Write(data)
 
-		a.log.Error("unable to encode server json", extra, err)
+		a.log.Error("unable to encode server json", extra, err, false)
 		return
 	}
 

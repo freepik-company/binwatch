@@ -38,37 +38,22 @@ func ExpandEnv(input []byte) []byte {
 	return result
 }
 
+func IsRegisteredPort(port uint32) bool {
+	// Usable ports: 1024 - 49151
+	return port >= 1024 && port <= 49151
+}
+
+func IsDynamicPort(port uint32) bool {
+	// Usable ports: 49152 - 65535
+	return port >= 49152 && port <= 65535
+}
+
 // GetBasicLogExtraFields TODO
 func GetBasicLogExtraFields(componentName string) logger.ExtraFieldsT {
 	return logger.ExtraFieldsT{
 		"service":   "BinWatch",
 		"component": componentName,
 	}
-}
-
-// GetCurrentBinlogPos TODO
-func GetCurrentBinlogPos(dsn string) (mysql.Position, error) {
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return mysql.Position{}, err
-	}
-	defer db.Close()
-
-	var (
-		file string
-		pos  uint32
-	)
-
-	row := db.QueryRow("SHOW MASTER STATUS")
-	err = row.Scan(&file, &pos, new(string), new(string), new(string)) // ignoramos columnas extra
-	if err != nil {
-		return mysql.Position{}, err
-	}
-
-	return mysql.Position{
-		Name: file,
-		Pos:  pos,
-	}, nil
 }
 
 // GetCurrentBinlogLocation TODO

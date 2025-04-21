@@ -70,7 +70,7 @@ func NewBinWatch(configPath string) (bw *BinWatchT, err error) {
 		return bw, err
 	}
 	// Usable ports: 1024 - 49151
-	if bw.cfg.Server.Port <= 1023 || bw.cfg.Server.Port > 49151 {
+	if !utils.IsRegisteredPort(bw.cfg.Server.Port) {
 		err = fmt.Errorf("invalid '%d' port number in server", bw.cfg.Server.Port)
 		return bw, err
 	}

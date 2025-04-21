@@ -101,7 +101,7 @@ func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 				item, err = w.rePool.Get(ctx)
 				if err != nil {
 					if err != context.Canceled {
-						w.log.Error("error getting item from pool", extra, err)
+						w.log.Error("error getting item from pool", extra, err, w.cfg.Server.StopInError)
 					}
 					continue
 				}
@@ -112,13 +112,13 @@ func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 						buffer := new(bytes.Buffer)
 						err = w.routs[ri].tmpl.Execute(buffer, item)
 						if err != nil {
-							w.log.Error("error executing template in pool item", extra, err)
+							w.log.Error("error executing template in pool item", extra, err, w.cfg.Server.StopInError)
 							break
 						}
 
 						err = w.conns[w.routs[ri].conn].Send(buffer.Bytes())
 						if err != nil {
-							w.log.Error("error sending data to connector", extra, err)
+							w.log.Error("error sending data to connector", extra, err, w.cfg.Server.StopInError)
 							break
 						}
 					}
@@ -127,12 +127,15 @@ func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 					continue
 				}
 
-				err = w.cach.Store(cache.BinlogLocation{
-					File:     item.Log.BinlogFile,
-					Position: uint32(item.Log.BinlogPosition),
-				})
-				if err != nil {
-					continue
+				if w.cfg.Server.Cache.Enabled {
+					err = w.cach.Store(cache.BinlogLocation{
+						File:     item.Log.BinlogFile,
+						Position: uint32(item.Log.BinlogPosition),
+					})
+					if err != nil {
+						w.log.Error("error saving current location in cache", extra, err, w.cfg.Server.StopInError)
+						continue
+					}
 				}
 
 				w.log.Info("success sending event to connector", extra)

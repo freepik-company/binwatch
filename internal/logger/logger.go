@@ -70,7 +70,7 @@ func (l *LoggerT) Warn(msg string, extra ExtraFieldsT, err error) {
 	extra.Del("error")
 }
 
-func (l *LoggerT) Error(msg string, extra ExtraFieldsT, err error) {
+func (l *LoggerT) Error(msg string, extra ExtraFieldsT, err error, stopExecution bool) {
 	if extra == nil {
 		extra = make(ExtraFieldsT)
 	}
@@ -79,17 +79,10 @@ func (l *LoggerT) Error(msg string, extra ExtraFieldsT, err error) {
 	}
 	l.logger.Error(msg, extraFieldName, extra)
 	extra.Del("error")
-}
 
-func (l *LoggerT) Fatal(msg string, extra ExtraFieldsT, err error) {
-	if extra == nil {
-		extra = make(ExtraFieldsT)
+	if stopExecution {
+		os.Exit(1)
 	}
-	if err != nil {
-		extra.Set("error", err.Error())
-	}
-	l.logger.Error(msg, extraFieldName, extra)
-	os.Exit(1)
 }
 
 func GetLevel(levelStr string) (l LevelT) {
