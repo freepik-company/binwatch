@@ -23,7 +23,7 @@ to monitor MySQL binlogs and capture changes occurring in database tables.
 
 > [!NOTE]
 > You can use environment variables in the configuration file. The environment variables must be written in the
-> format **\${ENV:<VAR_NAME>}\$**. The environment variables will be replaced by their values in the initialzation.
+> format `${ENV:<VAR_NAME>}$`. The environment variables will be replaced by their values in the initialzation.
 
 List of fields in v1alpha2 configuration:
 
