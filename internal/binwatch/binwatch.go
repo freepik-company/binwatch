@@ -13,8 +13,8 @@ import (
 	"binwatch/internal/binwatch/blreaderwork"
 	"binwatch/internal/binwatch/blsenderwork"
 	"binwatch/internal/binwatch/serverapi"
+	"binwatch/internal/cache"
 	"binwatch/internal/logger"
-	"binwatch/internal/managers"
 	"binwatch/internal/pools"
 	"binwatch/internal/utils"
 
@@ -32,7 +32,7 @@ type BinWatchT struct {
 	rePool *pools.RowEventPoolT
 
 	// managers
-	rm *managers.RedisManT
+	cach cache.CacheI
 
 	// services
 	bwa *serverapi.ServerAPIT
@@ -77,33 +77,33 @@ func NewBinWatch(configPath string) (bw *BinWatchT, err error) {
 
 	// Init common values
 
-	bw.rePool = pools.NewRowEventPool(1)
+	bw.rePool = pools.NewRowEventPool(int(bw.cfg.Server.Pool.Size))
 
 	// Init managers
 
 	if bw.cfg.Server.Cache.Enabled {
-		bw.rm, err = managers.NewRedisMan(&bw.cfg.Server)
+		bw.cach, err = cache.NewCache(bw.cfg.Server)
 		if err != nil {
-			err = fmt.Errorf("error in redis manager creation: %w", err)
+			err = fmt.Errorf("error in cache manager creation: %w", err)
 			return bw, err
 		}
 	}
 
 	// Init paralel services
 
-	bw.bwa, err = serverapi.NewBinWatchApi(bw.cfg)
+	bw.bwa, err = serverapi.NewBinWatchApi(bw.cfg, bw.rePool)
 	if err != nil {
 		err = fmt.Errorf("error in server API creation: %w", err)
 		return bw, err
 	}
 
-	bw.blr, err = blreaderwork.NewBinlogReaderWork(bw.cfg, bw.rm, bw.rePool)
+	bw.blr, err = blreaderwork.NewBinlogReaderWork(bw.cfg, bw.rePool, bw.cach)
 	if err != nil {
 		err = fmt.Errorf("error in binlog reader worker creation: %w", err)
 		return bw, err
 	}
 
-	bw.bls, err = blsenderwork.NewBinlogSenderWork(bw.cfg, bw.rePool)
+	bw.bls, err = blsenderwork.NewBinlogSenderWork(bw.cfg, bw.rePool, bw.cach)
 	if err != nil {
 		err = fmt.Errorf("error in binlog reader worker creation: %w", err)
 		return bw, err
