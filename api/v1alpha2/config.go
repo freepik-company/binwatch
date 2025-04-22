@@ -51,7 +51,8 @@ type ServerT struct {
 }
 
 type ServerPoolT struct {
-	Size uint32 `yaml:"size"`
+	Size      uint32 `yaml:"size"`
+	ItemByRow bool   `yaml:"itemByRow"`
 }
 
 // ServerCacheT

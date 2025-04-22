@@ -178,6 +178,9 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 				case *replication.RowsEvent:
 					{
 						re := e.Event.(*replication.RowsEvent)
+
+						// Set items basics
+
 						item := &pools.RowEventItemT{
 							Log: pools.RowEventItemLogT{
 								EventType:      e.Header.EventType.String(),
@@ -191,12 +194,15 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 							},
 						}
 
+						// Get item rows
+
 						colNamesKey := strings.Join([]string{item.Data.Database, item.Data.Table}, ".")
 						if _, ok := w.mysql.colNames[colNamesKey]; !ok {
 							continue
 						}
 
 						rowi := 0
+						itemRows := []map[string]any{}
 						for ri := range re.Rows {
 							if len(w.mysql.colNames[colNamesKey]) != len(re.Rows[ri]) {
 								err = fmt.Errorf("the table %s has %d columns but binlog have %d", colNamesKey, len(w.mysql.colNames[colNamesKey]), len(re.Rows[ri]))
@@ -207,10 +213,10 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 							if item.Data.Operation == utils.DMLOperationUpdate && ri%2 == 0 {
 								continue
 							}
-							item.Data.Rows = append(item.Data.Rows, map[string]any{})
+							itemRows = append(itemRows, map[string]any{})
 
 							for ci, cv := range w.mysql.colNames[colNamesKey] {
-								item.Data.Rows[rowi][cv] = re.Rows[ri][ci]
+								itemRows[rowi][cv] = re.Rows[ri][ci]
 							}
 							rowi++
 						}
@@ -218,8 +224,35 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 							continue
 						}
 
+						if w.cfg.Server.Pool.ItemByRow {
+							for _, rowv := range itemRows {
+								partialItem := &pools.RowEventItemT{
+									Log:  item.Log,
+									Data: item.Data,
+								}
+								partialItem.Data.Rows = []map[string]any{rowv}
+
+								w.rePool.Prepare(partialItem)
+								err = w.rePool.Add(ctx, partialItem)
+								if err != nil {
+									w.log.Error("error adding partial item in pool", extra, err, w.cfg.Server.StopInError)
+									break
+								}
+
+								extra.Set("event", partialItem)
+								w.log.Info("success adding event in pool", extra)
+								extra.Del("event")
+							}
+							continue
+						}
+
+						item.Data.Rows = itemRows
 						w.rePool.Prepare(item)
-						w.rePool.Add(ctx, item)
+						err = w.rePool.Add(ctx, item)
+						if err != nil {
+							w.log.Error("error adding item in pool", extra, err, w.cfg.Server.StopInError)
+							continue
+						}
 
 						extra.Set("event", item)
 						w.log.Info("success adding event in pool", extra)

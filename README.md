@@ -35,6 +35,7 @@ List of fields in v1alpha2 configuration:
 | `server.port`                        | `uint32`              | TCP port the server listens on. |
 | `server.stopInError`                 | `bool`                | Whether to stop the server when a fatal error occurs. |
 | `server.pool.size`                   | `uint32`              | Size of the internal worker pool. |
+| `server.pool.itemByRow`              | `bool`                | Boolean to add in pool an item by row in a single operation or the full list of rows. |
 | `server.cache.enabled`               | `bool`                | Enables or disables caching. |
 | `server.cache.type`                  | `string`              | Cache type (local or redis). |
 | `server.cache.local.path`            | `string`              | Filesystem path for the local cache. |
