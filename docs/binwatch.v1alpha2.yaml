@@ -53,6 +53,9 @@ routes:
 - name: testdb-users-operations # route name
   connector: webhook-upsert # conector to use
   operations: ["INSERT", "UPDATE", "DELETE"] # operations to watch
+  dbTables: {} # just send events from these database-table pairs
+  # dbTables:
+  #   testdb: [users]
   template: | # template to create the result
     {
       "index": "testdb-users-v1",
