@@ -1,0 +1,64 @@
+logger:
+  level: debug # debug|info|warn|error
+
+server:
+  id: example-server-id
+  host: "0.0.0.0" # api server host
+  port: 8080 # api server port
+  stopInError: true # stop execution in error or continue
+  pool:
+    size: 20 # event item pool size
+    itemByRow: true # event item by row in pool or list of rows by item
+  cache:
+    enabled: true
+    type: local # cache type: local|redis
+    local:
+      path: int.test/cache # path to directory where store the cache file
+    redis:
+      host: "127.0.0.1" # redis host
+      port: 6379 # redis port
+      password: "" # redis password
+
+source:
+  flavor: mysql # type of server: mysql|mariadb
+  serverID: 100 # database master id
+  host: "127.0.0.1" # database host
+  port: 3306 # database port
+  user: root # database user
+  password: test # database password
+  dbTables: {} # map of databases tables to watch
+  # dbTables:
+  #   testdb: [users]
+  readTimeout: 90s # event read timeout
+  heartbeatPeriod: 60s # event heartbeat period
+  # startLocation: # set this to start in this binlog location, WARNING!!! this option ignore the cache position value 
+  #   file: "mysql-bin.000001" # binlog file to start
+  #   position: 4 # binlog position in file to start
+
+
+connectors:
+- name: webhook-upsert # connector name
+  type: webhook # connector type: webhook|google_pubsub
+  webhook:
+    url: http://127.0.0.1:8085/api/v1/data # url to send the data
+    method: POST # method to use
+    headers: # list of headers
+      "Content-Type": "application/json"
+    tlsSkipVerify: true # tls verification
+  pubsub:
+    projectID: "example-project" # google project id
+    topicID: "example-topic" # google pubsub topic
+
+routes:
+- name: testdb-users-operations # route name
+  connector: webhook-upsert # conector to use
+  operations: ["INSERT", "UPDATE", "DELETE"] # operations to watch
+  dbTable: "" # just send events from this database-table pair in db.table format
+  # dbTable: "testdb.users"
+  template: | # template to create the result
+    {
+      "index": "testdb-users-v1",
+      "itemID":"{{ .ItemID }}",
+      "operation":"{{ .Data.Operation }}",
+      "rows": {{- .Data.Rows | toJson }}
+    }

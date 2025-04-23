@@ -18,23 +18,15 @@ package sync
 
 import (
 	//
-	"context"
-	"fmt"
-	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
-	coreLog "log"
-	"reflect"
+
+	"log"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	//
-	"binwatch/api/v1alpha1"
-	"binwatch/internal/config"
-	"binwatch/internal/hashring"
-	"binwatch/internal/log"
-	"binwatch/internal/sources/mysql"
+
+	"binwatch/internal/binwatch"
 )
 
 const (
@@ -62,77 +54,17 @@ func NewCommand() *cobra.Command {
 
 // SyncCommand TODO
 func SyncCommand(cmd *cobra.Command, args []string) {
-
-	// Configure application's context
-	app := v1alpha1.Application{
-		Config:  &v1alpha1.ConfigSpec{},
-		Context: context.Background(),
-	}
-
 	// Check the flags for this command
 	configPath, err := cmd.Flags().GetString("config")
 	if err != nil {
-		coreLog.Fatalf("Error getting configuration file path: %v", err)
+		log.Fatalf("Error getting configuration file path: %s", err.Error())
 	}
 
-	// Get and parse the config
-	configContent, err := config.ReadFile(configPath)
+	var bw *binwatch.BinWatchT
+	bw, err = binwatch.NewBinWatch(configPath)
 	if err != nil {
-		coreLog.Fatalf("Error parsing configuration file: %v", err)
+		log.Fatalf("error in binwatch instance creation: %s", err.Error())
 	}
 
-	// Set the configuration inside the global context
-	app.Config = &configContent
-
-	// Check that server name is configured
-	if app.Config.ServerId == "" {
-		app.Logger.Fatal("Server name is required in configuration file `server_name`.")
-	}
-
-	// Configure logger
-	logger, err := log.ConfigureLogger(&app)
-	if err != nil {
-		coreLog.Fatalf("Error configuring logger: %v", err)
-	}
-	app.Logger = logger
-
-	// Try to add server to the Hashring
-	hr := hashring.NewHashRing(1000)
-
-	// If hashring is present, wait for the server list to be populated, any other case continue
-	if !reflect.ValueOf(app.Config.Hashring).IsZero() {
-
-		app.Logger.Info(fmt.Sprintf("Setting up redis client to %s:%s", app.Config.Hashring.Redis.Host, app.Config.Hashring.Redis.Port))
-		app.RedisClient = redis.NewClient(&redis.Options{
-			Addr:        app.Config.Hashring.Redis.Host + ":" + app.Config.Hashring.Redis.Port,
-			Password:    app.Config.Hashring.Redis.Password,
-			DB:          0,
-			PoolSize:    10,
-			PoolTimeout: 120,
-		})
-
-		// Parse duration
-		syncTime, err := time.ParseDuration(app.Config.Hashring.SyncWorkerTime)
-		if err != nil {
-			app.Logger.Fatal("Error parsing duration", zap.Error(err))
-		}
-
-		go hr.SyncWorker(&app, syncTime)
-
-		for {
-			if len(hr.GetServerList()) != 0 {
-				break
-			}
-			app.Logger.Info("Waiting for hashring servers to be ready")
-			time.Sleep(1 * time.Second)
-		}
-	}
-
-	// Run MySQL Sync if MySQL config is present
-	if !reflect.DeepEqual(app.Config.Sources.MySQL, v1alpha1.MySQLConfig{}) {
-		app.Logger.Info("Starting MySQL dumper")
-		mysql.Sync(&app, hr)
-	} else {
-		app.Logger.Fatal("No connector configuration found")
-	}
+	bw.Run()
 }

@@ -1,200 +1,94 @@
 # BinWatch
+
+<!-- markdownlint-disable MD033 -->
+
 <img src="https://raw.githubusercontent.com/freepik-company/binwatch/master/docs/img/logo.png" alt="BinWatch Logo (Main) logo." width="150">
 
 ![GitHub go.mod Go version (subdirectory of monorepo)](https://img.shields.io/github/go-mod/go-version/freepik-company/binwatch)
 ![GitHub](https://img.shields.io/github/license/freepik-company/binwatch)
 
-BinWatch is a tool designed to subscribe to a MySQL database's binlog and track changes that occur in database tables. 
+BinWatch is a tool designed to subscribe to a MySQL database's binlog and track changes that occur in database tables.
 These changes are processed and sent to supported connectors in real-time.
 
-<img src="https://raw.githubusercontent.com/freepik-company/binwatch/master/docs/img/flow.png" alt="BinWatch (Main) Flow." width="800">
-
 ## Motivation
+
 The motivation behind this tool stems from the need for a system that allows simple, real-time tracking of changes in
 a MySQL database without requiring complex external tools that might complicate the process.
 
-We use the [go-mysql](https://github.com/go-mysql-org/go-mysql) library to read MySQL binlogs, exactly the 
-[canal](https://github.com/go-mysql-org/go-mysql/tree/master/canal) library of this reposiotory. This library enables us
-to monitor MySQL binlogs (and sync data using mysqldump if we want) and capture changes occurring in database tables.
+We use the [go-mysql](https://github.com/go-mysql-org/go-mysql) library to read MySQL binlogs, exactly the
+[replication](https://github.com/go-mysql-org/go-mysql/tree/master/replication) library of this reposiotory. This library enables us
+to monitor MySQL binlogs and capture changes occurring in database tables.
 
 ## Configuration
 
-To configure the tool, you need to create a YAML configuration file. Below is a configuration example:
-```yaml
----
-# BinWatch configuration file
-# This file is written in YAML format
+> [!NOTE]
+> You can use environment variables in the configuration file. The environment variables must be written in the
+> format `${ENV:<VAR_NAME>}$`. The environment variables will be replaced by their values in the initialzation.
 
-# ATTENTION!
-# You can use environment variables in the configuration file. The environment variables must be written in the
-# format $ENV_VAR_NAME. The environment variables will be replaced by their values at runtime.
+List of fields in v1alpha2 configuration:
 
-# Logger configuration
-logger:
-  # debug, info, warn, error, dpanic, panic, fatal
-  level: debug
-  # console or json
-  encoding: json
+| Field                                | Type                  | Description                                                                           |
+|:-------------------------------------|:----------------------|:--------------------------------------------------------------------------------------|
+| `logger.level`                       | `string`              | Log verbosity level (debug, info, warn, error).                                       |
+| `server.id`                          | `string`              | Unique identifier for this server instance.                                           |
+| `server.host`                        | `string`              | Hostname or IP address where the server runs.                                         |
+| `server.port`                        | `uint32`              | TCP port the server listens on.                                                       |
+| `server.stopInError`                 | `bool`                | Whether to stop the server when a fatal error occurs.                                 |
+| `server.pool.size`                   | `uint32`              | Size of the internal worker pool.                                                     |
+| `server.pool.itemByRow`              | `bool`                | Boolean to add in pool an item by row in a single operation or the full list of rows. |
+| `server.cache.enabled`               | `bool`                | Enables or disables caching.                                                          |
+| `server.cache.type`                  | `string`              | Cache type (local or redis).                                                          |
+| `server.cache.local.path`            | `string`              | Filesystem path for the local cache.                                                  |
+| `server.cache.redis.host`            | `string`              | Redis server hostname or IP.                                                          |
+| `server.cache.redis.port`            | `uint32`              | Redis server port.                                                                    |
+| `server.cache.redis.password`        | `string`              | Redis authentication password.                                                        |
+| `source.flavor`                      | `string`              | Type of MySQL-compatible source (mysql or mariadb).                                   |
+| `source.serverID`                    | `uint32`              | Unique server ID for replication.                                                     |
+| `source.host`                        | `string`              | Hostname or IP of the source database.                                                |
+| `source.port`                        | `uint32`              | Port of the source database.                                                          |
+| `source.user`                        | `string`              | Username for the source database.                                                     |
+| `source.password`                    | `string`              | Password for the source database.                                                     |
+| `source.dbTables`                    | `map[string][]string` | Map of database names to tables to monitor (e.g., { "db": ["table"] }).               |
+| `source.readTimeout`                 | `duration`            | Maximum time to wait for a read operation.                                            |
+| `source.heartbeatPeriod`             | `duration`            | Interval between heartbeat messages.                                                  |
+| `source.startLocation.file`          | `string`              | (Optional) Binlog file to start from.                                                 |
+| `source.startLocation.position`      | `uint32`              | (Optional) Binlog position to start from.                                             |
+| `connectors[].name`                  | `string`              | Name of the connector.                                                                |
+| `connectors[].type`                  | `string`              | Connector type (webhook or google_pubsub).                                            |
+| `connectors[].webhook.url`           | `string`              | Target URL for the webhook.                                                           |
+| `connectors[].webhook.method`        | `string`              | HTTP method used for webhook requests.                                                |
+| `connectors[].webhook.headers`       | `map[string]string`   | Headers to include in the webhook request.                                            |
+| `connectors[].webhook.tlsSkipVerify` | `bool`                | Skip TLS certificate verification.                                                    |
+| `connectors[].pubsub.projectID`      | `string`              | Google Cloud project ID for Pub/Sub.                                                  |
+| `connectors[].pubsub.topicID`        | `string`              | Pub/Sub topic ID.                                                                     |
+| `routes[].name`                      | `string`              | Name of the route.                                                                    |
+| `routes[].connector`                 | `string`              | Name of the connector this route uses.                                                |
+| `routes[].operations`                | `[]string`            | List of database operations to route (INSERT, UPDATE, DELETE).                        |
+| `routes[].template`                  | `string`              | Go template used to render the message sent by the route.                             |
+| `routes[].dbTable`                   | `string`              | Database.Table name to send to the connector (e.g., "db.table" ).                     |
 
-# Server id of the binwatch instance. Can be set via environment variable which will be replaced at runtime
-# It must have the format <hostname>:<port> or <ip>:<port> to be used in the hashring
-server_id: "$HOSTNAME:8080"
+## Standalone
 
-# Number of workers to process the events
-max_workers: 10
+This service is designed to be executed as a single instance.
+Adding replication would cause the binlogs sent to lose their
+order, which is crucial for this tool to function correctly.
+Additionally, replication would negatively impact performance,
+as the service would need to spend time synchronizing with
+other replicas continuously. No standalone approach also
+increases the risk of losing binlogs during the replicas
+synchronization process.
 
-# Flow control configuration to control the memory usage by the event connectors queue
-flow_control:
-  # Check interval to check the queue size
-  check_interval: 100ms
-  # List of thresholds to control the sleep time of the workers to avoid memory overflow
-  thresholds:
-    - queue_size: 1
-      sleep_time: 10ms
-    - queue_size: 10
-      sleep_time: 100ms
-    - queue_size: 100
-      sleep_time: 1s
-      
-# Hashring configuration for HA and load balancing purposes
-hashring:
+### Cache
 
-  # Confident mode
-  # This mode stores the position of the binlog in a redis server to avoid losing events when a new node is added to the ring
-  # confident_mode:
-  #  enabled: true
-  #
-  #  redis:
-  #    host: redis
-  #    port: 6379
-  #    password: ""
-  #    key_prefix: "binwatch"
-  
-  # Sync worker time to sync the ring nodes when a new node is added or removed from the ring
-  sync_worker_time: 300ms
-  
-  # API port to expose the hashring API and health check
-  api_port: 8080
-    
-  # For static ring discovery we need to define the server names that are part of the ring
-  static_ring_discovery:
-    hosts:
-      - test:8080
-      - test2:8080
-
-  # For DNS ring discovery we need to define the domain and the port of the headless service to get
-  # the list of server names that are part of the ring
-  # Recommended for kubernetes deployments with headless services
-  # dns_ring_discovery:
-  #   domain: "dns.example.com"
-  #   port: 8080
-
-# Sources configuration
-# List of sources to watch for changes in the database binlog
-sources:
-
-  # MySQL source configuration
-  mysql:
-    host: "$MYSQL_HOST"
-    port: $MYSQL_PORT
-    user: "$MYSQL_USER"
-    password: "$MYSQL_PASSWORD"
-
-    # Server ID must be unique across all MySQL servers
-    server_id: 100
-
-    # Read timeout
-    read_timeout: 90s
-
-    # Heartbeat period
-    heartbeat_period: 60s
-
-    # Flavor of the database. MySQL or MariaDB
-    flavor: mysql
-
-    # Just listen for events in these database-table pairs
-    filter_tables:
-      - database: test
-        table: test
-
-    # Start binlog position if you want to start reading from a specific position of binlog or mysqldump
-    # Set file mysqldump if you want to start from a specific position in the mysqldump.
-    # NOTE: mysqldump dumps in order of the primary key
-    start_position:
-      file: mysqldump
-      position: 4
-      
-    # Mysqldump configuration for sync command. Just can dump an entire database, many databases or many tables for ONE database.
-    # If many databases are specefied with tables, the tables will be ignored.
-    # Empty dump_config disables the previous mysql dump feature.
-    dump_config:
-      databases:
-        - test
-      tables:
-        - test
-      # Extra options for mysqldump command
-      # Recommended --single-transaction to avoid blocking the database
-      # mysqldump_extra_options:
-      #   - "--single-transaction"
-      # Default value is /usr/bin/mysqldump, path where mysqldump is located in the Docker image
-      mysqldump_bin_path: "/opt/homebrew/bin/mysqldump"
-
-# Data connectors configuration
-# List of connectors to send the data to
-connectors:
-
-  # Routes configuration for the connectors. It determines the events that will be sent to each connector and
-  # the data format that will be sent to the connector.
-  # Events can be insert, update or delete
-  # Data format is in golang template format. The data read from the binlog will be passed to the template as .data
-  # IMPORTANT: This part of configuration does not allow environment variables!!
-  routes:
-    - events: ["insert", "update"]
-      database: test
-      table: test
-      connector: pubsub-add
-      data: |
-        {{- printf `{ "index": "test", "id": %v, "data": %s}` .data.id (toJson .data) }}
-    - events: ["delete"]
-      database: test
-      table: test
-      connector: webhook-delete
-      data: |
-        {{- printf `{ "index": "test", "id": %v }` .data.id }}
-
-  # Connectors configuration. Currently only pubsub and webhook are supported.
-
-  # PubSub connector configuration
-  pubsub:
-    - name: pubsub-add
-      project_id: "test-project"
-      topic_id: "test-topic"
-
-  # Webhook connector configuration
-  webhook:
-    - name: webhook-delete
-      tls_skip_verify: false
-      url: "https://webhook.site/<id>"
-      method: "POST"
-      headers:
-        X-BinWatch: "true"
-      # credentials:
-      #  username: "$WEBHOOK_USERNAME"
-      #  password: "$WEBHOOK_PASSWORD"
-```
-
-## Hashring - Load Balancing and High Availability Approach
-For load balancing and high availability, we've implemented a hashring mechanism that operates across static nodes 
-or those auto-discovered via DNS. With this hashring, all service replicas read all binlog entries, but only process 
-those entries for which they have responsibility (the "cheese" is equally divided among them).
-
-### High Availability and Recovery Mechanism
-The high availability works with a memory store server (Redis) that stores the binlog position of each node.
+The cache can be enabled to ensure that, in the event of a
+sudden stop, the instance can resume from where it left off.
+This cache is updated with the binlog position after each
+binlog is sent.
 
 > [!IMPORTANT]
-> This hashring solution may lead to duplicate events during brief periods of time, but this approach was deliberately 
-> chosen to ensure high availability and recovery from failures. Furthermore, we've determined that duplicating events 
-> is preferable to losing them, as duplicates can be handled by the destination connector.
+> The config field `source.startLocation` overwrite the cache
+> binlog location in the initialization. Remove this field from
+> the configuration to use the cache location.
 
 ## Sources
 
@@ -219,6 +113,7 @@ The high availability works with a memory store server (Redis) that stores the b
 | Nats       | 🔜|
 
 ## Running BinWatch
+
 For running binwatch you need to create a configuration file and run the binary with the configuration file as a parameter.
 
 ```shell
@@ -226,17 +121,19 @@ go run cmd/main.go sync --config config.yaml
 ```
 
 ## Deployment
+
 We recommend to deploy BinWatch application with our [Helm registry](https://freepik-company.github.io/binwatch/).
 
-```
+```cmd
 helm repo add binwatch https://freepik-company.github.io/binwatch/
 ```
 
-```
+```cmd
 helm install binwatch binwatch/binwatch
 ```
 
 Example `values.yaml` file for helm deploying:
+
 ```yaml
 replicaCount: 2
 
@@ -296,71 +193,61 @@ configMap:
     config.yaml: |-
       logger:
         level: debug
-        encoding: json
-      
-      server_id: "$POD_IP:8080"
-        
-      max_workers: 10
 
-      flow_control:
-        check_interval: 1s
-        thresholds:
-          - queue_size: 100
-            sleep_time: 10ms
-          - queue_size: 1000
-            sleep_time: 100ms
-          - queue_size: 10000
-            sleep_time: 1s
-      
-      hashring:
-        sync_worker_time: 300ms
-        api_port: 8080
-        dns_ring_discovery:
-          domain: "binwatch-headless.binwatch.svc.cluster.local"
-          port: 8080
-      
-      sources:
-        mysql:
-          host: "$MYSQL_HOST"
-          port: $MYSQL_PORT
-          user: "$MYSQL_USER"
-          password: "$MYSQL_PASSWORD"
-          server_id: 100
-          read_timeout: 90s
-          heartbeat_period: 60s
-          flavor: mysql
-          filter_tables:
-            - database: test
-              table: test    
-          dump_config:
-              databases:
-                - test
-              tables:
-                - test
-      
+      server:
+        id: local
+        host: "127.0.0.1"
+        port: 8080
+        stopInError: true
+        pool:
+          size: 20
+        cache:
+          enabled: true
+          type: local
+          local:
+            path: int.test/cache
+
+      source:
+        flavor: mysql
+        serverID: 100
+        host: "127.0.0.1"
+        port: 3306
+        user: root
+        password: test
+        dbTables:
+          testdb: [users]
+        readTimeout: 90s
+        heartbeatPeriod: 60s
+        startLocation:
+          file: "mysql-bin.000001"
+          position: 4
+
+
       connectors:
-        routes:
-          - events: ["insert", "update"]
-            database: test
-            table: test
-            connector: webhook-test
-            data: |
-              {{- printf `{ "index": "test", "id": %v, "data": %s }` .data.id ( toJson .data ) }}
-          - events: ["delete"]
-            database: test
-            table: test
-            connector: webhook-test
-            data: |
-              {{- printf `{ "index": "test", "id": %v }` .data.id }}
-
+      - name: webhook-upsert
+        type: webhook
         webhook:
-          - name: webhook-test
-            tls_skip_verify: false
-            url: "$WEBHOOK_URL"
-            method: "POST"
-            headers:
-              X-BinWatch: "true"
+          url: http://127.0.0.1:8085/api/v1/data
+          method: POST
+          headers:
+            "Content-Type": "application/json"
+          tlsSkipVerify: true
+
+      routes:
+      - name: testdb-users-operations
+        connector: webhook-upsert
+        operations: ["INSERT", "UPDATE", "DELETE"]
+        dbTable: ""
+        # dbTable: "testdb.users"
+        template: |
+          {
+            "index": "testdb-users-v1",
+            "itemID":"{{ .ItemID }}",
+            "operation":"{{ .Data.Operation }}",
+            "rows": {{- .Data.Rows | toJson }}
+          }
 ```
+
 ## How to collaborate
 
 We are open to external collaborations for this project. For doing it you must fork the
@@ -370,10 +257,14 @@ repository, make your changes to the code and open a PR. The code will be review
 > this project on each iteration.
 
 ## Contributors
+
 * 🧔🏽‍♂️[@dfradehubs](https://github.com/dfradehubs) - Daniel Fradejas
 * 🧔🏻‍♂️[@achetronic](https://github.com/achetronic) - Alby Hernandez
+* 🧑🏻[@sebastocorp](https://github.com/sebastocorp) - Sebastián Vargas
 
 ## License
+
+<!-- markdownlint-disable MD046 -->
 
 Copyright 2025.
 
