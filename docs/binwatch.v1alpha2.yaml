@@ -6,6 +6,7 @@ server:
   host: "0.0.0.0" # api server host
   port: 8080 # api server port
   stopInError: true # stop execution in error or continue
+  senderWorkers: 1 # number of workers to send the events. Select 1 for sending events in order
   pool:
     size: 20 # event item pool size
     itemByRow: true # event item by row in pool or list of rows by item
