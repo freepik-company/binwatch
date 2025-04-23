@@ -18,12 +18,13 @@ type GooglePubsubT struct {
 
 func newGooglePubsub(cfg v1alpha2.ConnectorT) (c *GooglePubsubT, err error) {
 	c = &GooglePubsubT{
-		name: cfg.Name,
-		ctx:  context.Background(),
+		name:    cfg.Name,
+		ctx:     context.Background(),
+		topicID: cfg.Pubsub.TopicID,
 	}
 
 	c.cli, err = pubsub.NewClient(c.ctx, cfg.Pubsub.ProjectID)
-	
+
 	return c, err
 }
 
