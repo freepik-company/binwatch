@@ -10,6 +10,5 @@ RUN go build -o /app/binwatch cmd/main.go
 FROM mysql:8.0.31
 WORKDIR /app
 COPY --from=builder /app/binwatch /app/
-COPY docs/binwatch.v1alhpa2.yaml /app/config.yaml
 ENTRYPOINT [ "./binwatch", "sync" ]
 CMD ["--config", "/app/config.yaml"]
