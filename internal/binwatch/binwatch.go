@@ -103,6 +103,7 @@ func NewBinWatch(configPath string) (bw *BinWatchT, err error) {
 		return bw, err
 	}
 
+	bw.bls = make([]*blsenderwork.BLSenderWorkT, int(bw.cfg.Server.SenderWorkers))
 	for i := 0; i < int(bw.cfg.Server.SenderWorkers); i++ {
 		bw.bls[i], err = blsenderwork.NewBinlogSenderWork(bw.cfg, bw.rePool, bw.cach)
 		if err != nil {
