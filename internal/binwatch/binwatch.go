@@ -37,7 +37,7 @@ type BinWatchT struct {
 	// services
 	bwa *serverapi.ServerAPIT
 	blr *blreaderwork.BLReaderWorkT
-	bls *blsenderwork.BLSenderWorkT
+	bls []*blsenderwork.BLSenderWorkT
 }
 
 func NewBinWatch(configPath string) (bw *BinWatchT, err error) {
@@ -103,10 +103,12 @@ func NewBinWatch(configPath string) (bw *BinWatchT, err error) {
 		return bw, err
 	}
 
-	bw.bls, err = blsenderwork.NewBinlogSenderWork(bw.cfg, bw.rePool, bw.cach)
-	if err != nil {
-		err = fmt.Errorf("error in binlog reader worker creation: %w", err)
-		return bw, err
+	for i := 0; i < int(bw.cfg.Server.SenderWorkers); i++ {
+		bw.bls[i], err = blsenderwork.NewBinlogSenderWork(bw.cfg, bw.rePool, bw.cach)
+		if err != nil {
+			err = fmt.Errorf("error in binlog reader worker creation: %w", err)
+			return bw, err
+		}
 	}
 
 	return bw, err
@@ -123,10 +125,13 @@ func (bw *BinWatchT) Run() {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wgSize := int(bw.cfg.Server.SenderWorkers) + 2
+	wg.Add(wgSize)
 	go bw.bwa.Run(&wg, ctx)
 	go bw.blr.Run(&wg, ctx)
-	go bw.bls.Run(&wg, ctx)
+	for i := 0; i < int(bw.cfg.Server.SenderWorkers); i++ {
+		go bw.bls[i].Run(&wg, ctx)
+	}
 
 	sig := <-sigs
 	cancel()
