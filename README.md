@@ -27,45 +27,45 @@ to monitor MySQL binlogs and capture changes occurring in database tables.
 
 List of fields in v1alpha2 configuration:
 
-| Field                                | Type                  | Description                                                                                  |
-|:-------------------------------------| :--                   |:---------------------------------------------------------------------------------------------|
-| `logger.level`                       | `string`              | Log verbosity level (debug, info, warn, error).                                              |
-| `server.id`                          | `string`              | Unique identifier for this server instance.                                                  |
-| `server.host`                        | `string`              | Hostname or IP address where the server runs.                                                |
-| `server.port`                        | `uint32`              | TCP port the server listens on.                                                              |
-| `server.stopInError`                 | `bool`                | Whether to stop the server when a fatal error occurs.                                        |
-| `server.pool.size`                   | `uint32`              | Size of the internal worker pool.                                                            |
-| `server.pool.itemByRow`              | `bool`                | Boolean to add in pool an item by row in a single operation or the full list of rows.        |
-| `server.cache.enabled`               | `bool`                | Enables or disables caching.                                                                 |
-| `server.cache.type`                  | `string`              | Cache type (local or redis).                                                                 |
-| `server.cache.local.path`            | `string`              | Filesystem path for the local cache.                                                         |
-| `server.cache.redis.host`            | `string`              | Redis server hostname or IP.                                                                 |
-| `server.cache.redis.port`            | `uint32`              | Redis server port.                                                                           |
-| `server.cache.redis.password`        | `string`              | Redis authentication password.                                                               |
-| `source.flavor`                      | `string`              | Type of MySQL-compatible source (mysql or mariadb).                                          |
-| `source.serverID`                    | `uint32`              | Unique server ID for replication.                                                            |
-| `source.host`                        | `string`              | Hostname or IP of the source database.                                                       |
-| `source.port`                        | `uint32`              | Port of the source database.                                                                 |
-| `source.user`                        | `string`              | Username for the source database.                                                            |
-| `source.password`                    | `string`              | Password for the source database.                                                            |
-| `source.dbTables`                    | `map[string][]string` | Map of database names to tables to monitor (e.g., { "db": ["table"] }).                      |
-| `source.readTimeout`                 | `duration`            | Maximum time to wait for a read operation.                                                   |
-| `source.heartbeatPeriod`             | `duration`            | Interval between heartbeat messages.                                                         |
-| `source.startLocation.file`          | `string`              | (Optional) Binlog file to start from.                                                        |
-| `source.startLocation.position`      | `uint32`              | (Optional) Binlog position to start from.                                                    |
-| `connectors[].name`                  | `string`              | Name of the connector.                                                                       |
-| `connectors[].type`                  | `string`              | Connector type (webhook or google_pubsub).                                                   |
-| `connectors[].webhook.url`           | `string`              | Target URL for the webhook.                                                                  |
-| `connectors[].webhook.method`        | `string`              | HTTP method used for webhook requests.                                                       |
-| `connectors[].webhook.headers`       | `map[string]string`   | Headers to include in the webhook request.                                                   |
-| `connectors[].webhook.tlsSkipVerify` | `bool`                | Skip TLS certificate verification.                                                           |
-| `connectors[].pubsub.projectID`      | `string`              | Google Cloud project ID for Pub/Sub.                                                         |
-| `connectors[].pubsub.topicID`        | `string`              | Pub/Sub topic ID.                                                                            |
-| `routes[].name`                      | `string`              | Name of the route.                                                                           |
-| `routes[].connector`                 | `string`              | Name of the connector this route uses.                                                       |
-| `routes[].operations`                | `[]string`            | List of database operations to route (INSERT, UPDATE, DELETE).                               |
-| `routes[].template`                  | `string`              | Go template used to render the message sent by the route.                                    |
-| `routes[].dbTables`                  | `map[string][]string` | Map of database names to tables events to send to the conenctor (e.g., { "db": ["table"] }). |
+| Field                                | Type                  | Description                                                                           |
+|:-------------------------------------|:----------------------|:--------------------------------------------------------------------------------------|
+| `logger.level`                       | `string`              | Log verbosity level (debug, info, warn, error).                                       |
+| `server.id`                          | `string`              | Unique identifier for this server instance.                                           |
+| `server.host`                        | `string`              | Hostname or IP address where the server runs.                                         |
+| `server.port`                        | `uint32`              | TCP port the server listens on.                                                       |
+| `server.stopInError`                 | `bool`                | Whether to stop the server when a fatal error occurs.                                 |
+| `server.pool.size`                   | `uint32`              | Size of the internal worker pool.                                                     |
+| `server.pool.itemByRow`              | `bool`                | Boolean to add in pool an item by row in a single operation or the full list of rows. |
+| `server.cache.enabled`               | `bool`                | Enables or disables caching.                                                          |
+| `server.cache.type`                  | `string`              | Cache type (local or redis).                                                          |
+| `server.cache.local.path`            | `string`              | Filesystem path for the local cache.                                                  |
+| `server.cache.redis.host`            | `string`              | Redis server hostname or IP.                                                          |
+| `server.cache.redis.port`            | `uint32`              | Redis server port.                                                                    |
+| `server.cache.redis.password`        | `string`              | Redis authentication password.                                                        |
+| `source.flavor`                      | `string`              | Type of MySQL-compatible source (mysql or mariadb).                                   |
+| `source.serverID`                    | `uint32`              | Unique server ID for replication.                                                     |
+| `source.host`                        | `string`              | Hostname or IP of the source database.                                                |
+| `source.port`                        | `uint32`              | Port of the source database.                                                          |
+| `source.user`                        | `string`              | Username for the source database.                                                     |
+| `source.password`                    | `string`              | Password for the source database.                                                     |
+| `source.dbTables`                    | `map[string][]string` | Map of database names to tables to monitor (e.g., { "db": ["table"] }).               |
+| `source.readTimeout`                 | `duration`            | Maximum time to wait for a read operation.                                            |
+| `source.heartbeatPeriod`             | `duration`            | Interval between heartbeat messages.                                                  |
+| `source.startLocation.file`          | `string`              | (Optional) Binlog file to start from.                                                 |
+| `source.startLocation.position`      | `uint32`              | (Optional) Binlog position to start from.                                             |
+| `connectors[].name`                  | `string`              | Name of the connector.                                                                |
+| `connectors[].type`                  | `string`              | Connector type (webhook or google_pubsub).                                            |
+| `connectors[].webhook.url`           | `string`              | Target URL for the webhook.                                                           |
+| `connectors[].webhook.method`        | `string`              | HTTP method used for webhook requests.                                                |
+| `connectors[].webhook.headers`       | `map[string]string`   | Headers to include in the webhook request.                                            |
+| `connectors[].webhook.tlsSkipVerify` | `bool`                | Skip TLS certificate verification.                                                    |
+| `connectors[].pubsub.projectID`      | `string`              | Google Cloud project ID for Pub/Sub.                                                  |
+| `connectors[].pubsub.topicID`        | `string`              | Pub/Sub topic ID.                                                                     |
+| `routes[].name`                      | `string`              | Name of the route.                                                                    |
+| `routes[].connector`                 | `string`              | Name of the connector this route uses.                                                |
+| `routes[].operations`                | `[]string`            | List of database operations to route (INSERT, UPDATE, DELETE).                        |
+| `routes[].template`                  | `string`              | Go template used to render the message sent by the route.                             |
+| `routes[].dbTable`                   | `string`              | Database.Table name to send to the connector (e.g., "db.table" ).                     |
 
 ## Standalone
 
@@ -237,9 +237,8 @@ configMap:
       - name: testdb-users-operations
         connector: webhook-upsert
         operations: ["INSERT", "UPDATE", "DELETE"]
-        dbTables: {}
-        # dbTables:
-        #   testdb: [users]
+        dbTable: ""
+        # dbTable: "testdb.users"
         template: |
           {
             "index": "testdb-users-v1",

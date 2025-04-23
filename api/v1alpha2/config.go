@@ -138,9 +138,9 @@ type ConnectorWebhookCredentialsT struct {
  */
 
 type RouteT struct {
-	Name       string              `yaml:"name"`
-	Operations []string            `yaml:"operations"`
-	Connector  string              `yaml:"connector"`
-	Template   string              `yaml:"template"`
-	DBTables   map[string][]string `yaml:"dbTables"`
+	Name       string   `yaml:"name"`
+	Operations []string `yaml:"operations"`
+	Connector  string   `yaml:"connector"`
+	Template   string   `yaml:"template"`
+	DBTable    string   `yaml:"dbTable"`
 }

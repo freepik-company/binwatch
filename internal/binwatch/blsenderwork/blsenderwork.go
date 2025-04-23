@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"reflect"
 	"slices"
 	"sync"
 	"text/template"
@@ -36,7 +35,7 @@ type routeT struct {
 	name string
 	conn string
 	ops  []string
-	dbt  map[string][]string
+	dbt  string
 	tmpl *template.Template
 }
 
@@ -63,7 +62,7 @@ func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cac
 			name: rtv.Name,
 			conn: rtv.Connector,
 			ops:  rtv.Operations,
-			dbt:  rtv.DBTables,
+			dbt:  rtv.DBTable,
 		}
 
 		if _, ok := w.conns[rt.conn]; !ok {
@@ -111,18 +110,9 @@ func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 				extra.Set("event", item)
 
 				for ri := range w.routs {
-					sendEv := false
-					if reflect.ValueOf(w.routs[ri].dbt).IsZero() {
-						sendEv = true
-					} else {
-						for db, t := range w.routs[ri].dbt {
-							if db == item.Data.Database && slices.Contains(t, item.Data.Table) {
-								sendEv = true
-								break
-							}
-						}
-					}
-					if slices.Contains(w.routs[ri].ops, item.Data.Operation) && sendEv {
+					if slices.Contains(w.routs[ri].ops, item.Data.Operation) &&
+						fmt.Sprintf("%s.%s", item.Data.Database, item.Data.Table) == w.routs[ri].dbt {
+
 						buffer := new(bytes.Buffer)
 						err = w.routs[ri].tmpl.Execute(buffer, item)
 						if err != nil {
