@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/redis/go-redis/v9"
@@ -26,7 +27,7 @@ func newRedisCache(cfg v1alpha2.ServerT) (c *RedisCacheT, err error) {
 		Password:    cfg.Cache.Redis.Password,
 		DB:          0,
 		PoolSize:    10,
-		PoolTimeout: 120,
+		PoolTimeout: 120 * time.Second,
 	})
 
 	return c, err
