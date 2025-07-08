@@ -147,18 +147,6 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 						w.mysql.blSyncer.Close()
 						time.Sleep(5 * time.Second)
 
-						if w.cfg.Server.Cache.Enabled {
-							var blLoc cache.BinlogLocation
-							blLoc, err = w.cach.Load()
-							if err != nil {
-								w.log.Error("error in get cache binlog location", extra, err, true)
-							}
-							w.mysql.blLoc = mysql.Position{
-								Name: blLoc.File,
-								Pos:  blLoc.Position,
-							}
-						}
-
 						w.mysql.blSyncer = replication.NewBinlogSyncer(replication.BinlogSyncerConfig{
 							Flavor:          w.cfg.Source.Flavor,
 							ServerID:        w.cfg.Source.ServerID,
@@ -212,6 +200,7 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 				case *replication.RowsEvent:
 					{
 						re := e.Event.(*replication.RowsEvent)
+						w.mysql.blLoc.Pos = e.Header.LogPos
 
 						// Set items basics
 
