@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"binwatch/api/v1alpha2"
 	"binwatch/internal/cache"
@@ -141,6 +142,27 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 				if err != nil {
 					if err != context.Canceled {
 						w.log.Error("error in get binlog event", extra, err, w.cfg.Server.StopInError)
+
+						w.log.Info("restarting syncer", extra)
+						w.mysql.blSyncer.Close()
+						time.Sleep(5 * time.Second)
+
+						w.mysql.blSyncer = replication.NewBinlogSyncer(replication.BinlogSyncerConfig{
+							Flavor:          w.cfg.Source.Flavor,
+							ServerID:        w.cfg.Source.ServerID,
+							Host:            w.cfg.Source.Host,
+							Port:            uint16(w.cfg.Source.Port),
+							User:            w.cfg.Source.User,
+							Password:        w.cfg.Source.Password,
+							ReadTimeout:     w.cfg.Source.ReadTimeout,
+							HeartbeatPeriod: w.cfg.Source.HeartbeatPeriod,
+							Logger:          logger.DummyLogger{},
+						})
+
+						w.mysql.blStream, err = w.mysql.blSyncer.StartSync(w.mysql.blLoc)
+						if err != nil {
+							w.log.Error("unable to restart syncer", extra, err, true)
+						}
 					}
 					continue
 				}
@@ -178,6 +200,7 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 				case *replication.RowsEvent:
 					{
 						re := e.Event.(*replication.RowsEvent)
+						w.mysql.blLoc.Pos = e.Header.LogPos
 
 						// Set items basics
 
