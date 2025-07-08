@@ -141,6 +141,12 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 				if err != nil {
 					if err != context.Canceled {
 						w.log.Error("error in get binlog event", extra, err, w.cfg.Server.StopInError)
+						
+						w.log.Info("restart syncer", extra)
+						w.mysql.blStream, err = w.mysql.blSyncer.StartSync(w.mysql.blLoc)
+						if err != nil {
+							w.log.Error("unable to restart syncer", extra, err, true)
+						}
 					}
 					continue
 				}
