@@ -34,7 +34,7 @@ List of fields in v1alpha2 configuration:
 | `server.host`                         | `string`              | Hostname or IP address where the server runs.                                         |
 | `server.port`                         | `uint32`              | TCP port the server listens on.                                                       |
 | `server.stopInError`                  | `bool`                | Whether to stop the server when a fatal error occurs.                                 |
-| `server.restartSyncerOnError`         | `bool`                | Restart the syncer from the latest position when there are an error reading binlog.   |
+| `server.restartSyncerOnError`         | `bool`                | Restart the syncer from the latest position when there is an error reading binlog.   |
 | `server.senderWorkers`                | `uint32`              | Number of sender workers. Set it to 1 to preserve event order.                        |
 | `server.pool.size`                    | `uint32`              | Size of the internal worker pool.                                                     |
 | `server.pool.itemByRow`               | `bool`                | Boolean to add in pool an item by row in a single operation or the full list of rows. |
