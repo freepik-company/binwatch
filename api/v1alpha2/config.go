@@ -42,13 +42,14 @@ type LoggerT struct {
 
 // ServerT
 type ServerT struct {
-	ID            string       `yaml:"id"`
-	Host          string       `yaml:"host"`
-	Port          uint32       `yaml:"port"`
-	StopInError   bool         `yaml:"stopInError"`
-	Pool          ServerPoolT  `yaml:"pool"`
-	Cache         ServerCacheT `yaml:"cache"`
-	SenderWorkers uint32       `yaml:"senderWorkers"`
+	ID                   string       `yaml:"id"`
+	Host                 string       `yaml:"host"`
+	Port                 uint32       `yaml:"port"`
+	StopInError          bool         `yaml:"stopInError"`
+	RestartSyncerOnError bool         `yaml:"restartSyncerOnError"`
+	Pool                 ServerPoolT  `yaml:"pool"`
+	Cache                ServerCacheT `yaml:"cache"`
+	SenderWorkers        uint32       `yaml:"senderWorkers"`
 }
 
 type ServerPoolT struct {
