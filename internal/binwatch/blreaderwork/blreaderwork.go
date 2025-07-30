@@ -147,7 +147,7 @@ func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 						extra.Del("binlogFile")
 
 						// Restart syncer if RestartSyncerOnError is true
-						if !w.cfg.Server.RestartSyncerOnError {
+						if w.cfg.Server.RestartSyncerOnError {
 
 							w.log.Info("restarting syncer", extra)
 							w.mysql.blSyncer.Close()
