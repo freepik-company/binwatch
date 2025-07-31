@@ -56,8 +56,8 @@ func (p *RowEventPoolT) Get(ctx context.Context) (*RowEventItemT, error) {
 
 func (p *RowEventPoolT) Prepare(item *RowEventItemT) error {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	item.ItemID = p.counter + 1
-	p.mu.Unlock()
 
 	return nil
 }
