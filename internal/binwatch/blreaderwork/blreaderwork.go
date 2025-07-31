@@ -113,6 +113,11 @@ func NewBinlogReaderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cac
 
 func (w *BLReaderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 	defer wg.Done()
+	defer func() {
+		if w.mysql.blSyncer != nil {
+			w.mysql.blSyncer.Close()
+		}
+	}()
 	var extra = utils.GetBasicLogExtraFields(componentName)
 	var err error
 

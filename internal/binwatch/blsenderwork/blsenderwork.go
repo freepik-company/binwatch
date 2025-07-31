@@ -111,7 +111,7 @@ func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 
 				for ri := range w.routs {
 					if slices.Contains(w.routs[ri].ops, item.Data.Operation) &&
-						fmt.Sprintf("%s.%s", item.Data.Database, item.Data.Table) == w.routs[ri].dbt {
+						(w.routs[ri].dbt == "" || fmt.Sprintf("%s.%s", item.Data.Database, item.Data.Table) == w.routs[ri].dbt) {
 
 						buffer := new(bytes.Buffer)
 						err = w.routs[ri].tmpl.Execute(buffer, item)

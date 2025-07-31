@@ -71,7 +71,7 @@ func (c *LocalCacheT) Load() (blLoc BinlogLocation, err error) {
 
 	var pos uint64
 	pos, err = strconv.ParseUint(locParts[1], 10, 32)
-	if len(locParts) != 2 {
+	if err != nil {
 		err = fmt.Errorf("error parsing location in '%s' cache file, position format error: %w", c.file, err)
 		return blLoc, err
 	}

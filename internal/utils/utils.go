@@ -114,12 +114,14 @@ func GetTableColumns(ops DBOptions, dbTables map[string][]string) (dbTableColsNa
 			if err != nil {
 				return dbTableColsNames, err
 			}
-			defer rows.Close()
 
 			columns, err := rows.Columns()
 			if err != nil {
+				rows.Close()
 				return dbTableColsNames, err
 			}
+			rows.Close()
+			
 			currentKey := strings.Join([]string{dbk, tv}, ".")
 			dbTableColsNames[currentKey] = append(dbTableColsNames[currentKey], columns...)
 		}
