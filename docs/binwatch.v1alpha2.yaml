@@ -55,6 +55,10 @@ routes:
 - name: testdb-users-operations # route name
   connector: webhook-upsert # conector to use
   operations: ["INSERT", "UPDATE", "DELETE"] # operations to watch
+  processByMod:
+    enabled: false # skip events by mod-zero
+    mod: 10 # mod value
+    value: 0 # value to skip
   dbTable: "" # just send events from this database-table pair in db.table format
   # dbTable: "testdb.users"
   template: | # template to create the result
