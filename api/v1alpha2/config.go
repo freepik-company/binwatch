@@ -20,11 +20,17 @@ import "time"
 
 // ConfigT
 type ConfigT struct {
-	Logger     LoggerT      `yaml:"logger"`
-	Server     ServerT      `yaml:"server"`
-	Source     SourceT      `yaml:"source"`
-	Connectors []ConnectorT `yaml:"connectors"`
-	Routes     []RouteT     `yaml:"routes"`
+	Logger       LoggerT       `yaml:"logger"`
+	Server       ServerT       `yaml:"server"`
+	Source       SourceT       `yaml:"source"`
+	ProcessByMod ProcessByModT `yaml:"processByMod"`
+	Connectors   []ConnectorT  `yaml:"connectors"`
+	Routes       []RouteT      `yaml:"routes"`
+}
+
+type ProcessByModT struct {
+	Mod   uint64 `yaml:"mod"`
+	Value uint64 `yaml:"value"`
 }
 
 /*
@@ -140,15 +146,9 @@ type ConnectorWebhookCredentialsT struct {
  */
 
 type RouteT struct {
-	Name         string        `yaml:"name"`
-	Operations   []string      `yaml:"operations"`
-	Connector    string        `yaml:"connector"`
-	Template     string        `yaml:"template"`
-	DBTable      string        `yaml:"dbTable"`
-	ProcessByMod ProcessByModT `yaml:"processByMod"`
-}
-
-type ProcessByModT struct {
-	Mod   uint64 `yaml:"mod"`
-	Value uint64 `yaml:"value"`
+	Name       string   `yaml:"name"`
+	Operations []string `yaml:"operations"`
+	Connector  string   `yaml:"connector"`
+	Template   string   `yaml:"template"`
+	DBTable    string   `yaml:"dbTable"`
 }

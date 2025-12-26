@@ -29,6 +29,9 @@ type BLSenderWorkT struct {
 	cach   cache.CacheI
 	conns  map[string]connectors.ConnectorI
 	routs  []routeT
+
+	proByModMod uint64
+	proByModVal uint64
 }
 
 type routeT struct {
@@ -37,9 +40,6 @@ type routeT struct {
 	ops  []string
 	dbt  string
 	tmpl *template.Template
-
-	proByModMod uint64
-	proByModVal uint64
 }
 
 func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cach cache.CacheI) (w *BLSenderWorkT, err error) {
@@ -50,6 +50,9 @@ func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cac
 		rePool: rePool,
 		conns:  make(map[string]connectors.ConnectorI),
 		cach:   cach,
+
+		proByModMod: cfg.ProcessByMod.Mod,
+		proByModVal: cfg.ProcessByMod.Value,
 	}
 
 	for _, connv := range cfg.Connectors {
@@ -62,12 +65,10 @@ func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cac
 
 	for _, rtv := range cfg.Routes {
 		rt := routeT{
-			name:        rtv.Name,
-			conn:        rtv.Connector,
-			ops:         rtv.Operations,
-			dbt:         rtv.DBTable,
-			proByModMod: rtv.ProcessByMod.Mod,
-			proByModVal: rtv.ProcessByMod.Value,
+			name: rtv.Name,
+			conn: rtv.Connector,
+			ops:  rtv.Operations,
+			dbt:  rtv.DBTable,
 		}
 
 		if _, ok := w.conns[rt.conn]; !ok {
@@ -114,10 +115,13 @@ func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 				}
 				extra.Set("event", item)
 
+				if w.proByModMod != 0 && item.Log.BinlogPosition%w.proByModMod != w.proByModVal {
+					continue
+				}
+
 				for ri := range w.routs {
 					if slices.Contains(w.routs[ri].ops, item.Data.Operation) &&
-						fmt.Sprintf("%s.%s", item.Data.Database, item.Data.Table) == w.routs[ri].dbt &&
-						(w.routs[ri].proByModMod != 0 && item.ItemID%w.routs[ri].proByModMod == w.routs[ri].proByModVal) {
+						fmt.Sprintf("%s.%s", item.Data.Database, item.Data.Table) == w.routs[ri].dbt {
 
 						buffer := new(bytes.Buffer)
 						err = w.routs[ri].tmpl.Execute(buffer, item)
