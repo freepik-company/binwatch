@@ -49,7 +49,7 @@ func TestShouldProcess_DisabledAcceptsAll(t *testing.T) {
 }
 
 // BinlogPosition fallback: each event is routed to exactly one shard, and
-// every event lands on some shard (partition coverage).
+// the load spreads roughly evenly across shards once it's hashed.
 func TestShouldProcess_BinlogPositionPartitionsAllEvents(t *testing.T) {
 	const count uint64 = 3
 	workers := []*BLSenderWorkT{
@@ -58,12 +58,13 @@ func TestShouldProcess_BinlogPositionPartitionsAllEvents(t *testing.T) {
 		newTestWorker(t, count, 2, ""),
 	}
 
-	counts := map[uint64]int{}
-	for pos := uint64(0); pos < 300; pos++ {
+	counts := make([]int, count)
+	const total = 3000
+	for pos := uint64(1); pos <= total; pos++ {
 		matches := 0
 		for idx, w := range workers {
 			if w.shouldProcess(itemAtPos(pos)) {
-				counts[uint64(idx)]++
+				counts[idx]++
 				matches++
 			}
 		}
@@ -72,10 +73,49 @@ func TestShouldProcess_BinlogPositionPartitionsAllEvents(t *testing.T) {
 		}
 	}
 
-	// 300 events, 3 shards -> 100 each.
+	expected := total / int(count)
+	tolerance := expected / 5 // 20% skew tolerance after FNV-1a hashing
 	for idx, c := range counts {
-		if c != 100 {
-			t.Errorf("shard %d processed %d events, want 100 (BinlogPosition is sequential so distribution is exact)", idx, c)
+		if c < expected-tolerance || c > expected+tolerance {
+			t.Errorf("shard %d processed %d events, want ~%d (±%d)", idx, c, expected, tolerance)
+		}
+	}
+}
+
+// Regression test: BinlogPosition is a byte offset in the binlog file, so
+// consecutive events advance by similar deltas. With raw `pos % count` and
+// an even step (e.g. 150-byte events with count=2), every event would land
+// on the same shard. Hashing through FNV-1a before the modulo must keep the
+// distribution balanced.
+func TestShouldProcess_BinlogPositionByteOffsetEvenStep(t *testing.T) {
+	const count uint64 = 2
+	workers := []*BLSenderWorkT{
+		newTestWorker(t, count, 0, ""),
+		newTestWorker(t, count, 1, ""),
+	}
+
+	counts := make([]int, count)
+	const total = 2000
+	const step uint64 = 150
+	for i := uint64(1); i <= total; i++ {
+		pos := i * step
+		matches := 0
+		for idx, w := range workers {
+			if w.shouldProcess(itemAtPos(pos)) {
+				counts[idx]++
+				matches++
+			}
+		}
+		if matches != 1 {
+			t.Fatalf("event at pos %d matched %d shards, want exactly 1", pos, matches)
+		}
+	}
+
+	expected := total / int(count)
+	tolerance := expected / 5
+	for idx, c := range counts {
+		if c < expected-tolerance || c > expected+tolerance {
+			t.Errorf("shard %d processed %d events with %d-byte step positions, want ~%d (±%d)", idx, c, step, expected, tolerance)
 		}
 	}
 }

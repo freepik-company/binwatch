@@ -3,6 +3,7 @@ package blsenderwork
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"hash/fnv"
 	"slices"
@@ -113,38 +114,38 @@ func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cac
 // shouldProcess returns true if the given event belongs to this shard.
 // When sharding is disabled it always returns true.
 //
-// If a KeyTemplate is configured, it is rendered against the event and the
-// resulting bytes are hashed (FNV-1a 64) to derive the bucket. This keeps
-// related events (e.g. all updates to the same row PK) on the same shard.
-//
-// If no KeyTemplate is set, BinlogPosition is used as the bucket key, which
-// distributes load evenly but does not guarantee same-row affinity.
+// The shard key is always hashed through FNV-1a 64 before the modulo to keep
+// the distribution balanced. If a KeyTemplate is configured, it is rendered
+// against the event and the rendered bytes are hashed — same-key events (e.g.
+// all updates to the same row PK) always land on the same shard. If no
+// KeyTemplate is set, the 8 bytes of BinlogPosition are hashed. BinlogPosition
+// is a byte offset within the binlog file (not an event counter), so events
+// of similar size step by similar amounts; hashing first avoids pathological
+// modulo collisions when the step happens to share a common factor with
+// shardCount.
 func (w *BLSenderWorkT) shouldProcess(item *pools.RowEventItemT) bool {
 	if !w.shardEnabled {
 		return true
 	}
 
-	var bucket uint64
+	h := fnv.New64a()
 	if w.shardKeyTmpl != nil {
 		buf := new(bytes.Buffer)
 		if err := w.shardKeyTmpl.Execute(buf, item); err != nil {
-			// On template error: fail-open (process), and log. Dropping
-			// silently would risk losing events; processing on every shard
-			// would duplicate. We pick "this shard handles it" so at least
-			// one shard sends it.
+			// Template errors are deterministic for a given event, so every
+			// replica takes this same BinlogPosition fallback path and they
+			// agree on the owner shard — no duplication, no loss.
 			extra := utils.GetBasicLogExtraFields(componentName)
 			w.log.Error("error rendering sharding.keyTemplate, falling back to BinlogPosition", extra, err, false)
-			bucket = item.Log.BinlogPosition
+			_ = binary.Write(h, binary.LittleEndian, item.Log.BinlogPosition)
 		} else {
-			h := fnv.New64a()
 			_, _ = h.Write(buf.Bytes())
-			bucket = h.Sum64()
 		}
 	} else {
-		bucket = item.Log.BinlogPosition
+		_ = binary.Write(h, binary.LittleEndian, item.Log.BinlogPosition)
 	}
 
-	return bucket%w.shardCount == w.shardIndex
+	return h.Sum64()%w.shardCount == w.shardIndex
 }
 
 func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
