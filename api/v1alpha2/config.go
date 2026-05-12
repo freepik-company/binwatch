@@ -23,8 +23,27 @@ type ConfigT struct {
 	Logger     LoggerT      `yaml:"logger"`
 	Server     ServerT      `yaml:"server"`
 	Source     SourceT      `yaml:"source"`
+	Sharding   ShardingT    `yaml:"sharding"`
 	Connectors []ConnectorT `yaml:"connectors"`
 	Routes     []RouteT     `yaml:"routes"`
+}
+
+/*
+ *  Sharding configuration
+ */
+
+// ShardingT allows running the same binwatch config in N parallel instances
+// where each instance only processes its own slice of events. Useful to scale
+// the sender horizontally without duplicating writes downstream.
+//
+// Index and Count are usually injected via env vars (e.g. from a StatefulSet
+// pod ordinal) using ${ENV:VAR}$ substitution, so the same YAML can be reused
+// across all replicas.
+type ShardingT struct {
+	Enabled     bool   `yaml:"enabled"`
+	Count       uint64 `yaml:"count"`
+	Index       uint64 `yaml:"index"`
+	KeyTemplate string `yaml:"keyTemplate"`
 }
 
 /*

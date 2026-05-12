@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/fnv"
 	"slices"
 	"sync"
 	"text/template"
@@ -29,6 +30,11 @@ type BLSenderWorkT struct {
 	cach   cache.CacheI
 	conns  map[string]connectors.ConnectorI
 	routs  []routeT
+
+	shardEnabled bool
+	shardCount   uint64
+	shardIndex   uint64
+	shardKeyTmpl *template.Template
 }
 
 type routeT struct {
@@ -47,6 +53,28 @@ func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cac
 		rePool: rePool,
 		conns:  make(map[string]connectors.ConnectorI),
 		cach:   cach,
+
+		shardEnabled: cfg.Sharding.Enabled,
+		shardCount:   cfg.Sharding.Count,
+		shardIndex:   cfg.Sharding.Index,
+	}
+
+	if w.shardEnabled {
+		if w.shardCount == 0 {
+			err = fmt.Errorf("sharding enabled but 'sharding.count' is zero")
+			return w, err
+		}
+		if w.shardIndex >= w.shardCount {
+			err = fmt.Errorf("sharding 'index' (%d) must be lower than 'count' (%d)", w.shardIndex, w.shardCount)
+			return w, err
+		}
+		if cfg.Sharding.KeyTemplate != "" {
+			w.shardKeyTmpl, err = tmpl.NewTemplate("sharding-key", cfg.Sharding.KeyTemplate)
+			if err != nil {
+				err = fmt.Errorf("error parsing 'sharding.keyTemplate': %w", err)
+				return w, err
+			}
+		}
 	}
 
 	for _, connv := range cfg.Connectors {
@@ -82,6 +110,43 @@ func NewBinlogSenderWork(cfg *v1alpha2.ConfigT, rePool *pools.RowEventPoolT, cac
 	return w, err
 }
 
+// shouldProcess returns true if the given event belongs to this shard.
+// When sharding is disabled it always returns true.
+//
+// If a KeyTemplate is configured, it is rendered against the event and the
+// resulting bytes are hashed (FNV-1a 64) to derive the bucket. This keeps
+// related events (e.g. all updates to the same row PK) on the same shard.
+//
+// If no KeyTemplate is set, BinlogPosition is used as the bucket key, which
+// distributes load evenly but does not guarantee same-row affinity.
+func (w *BLSenderWorkT) shouldProcess(item *pools.RowEventItemT) bool {
+	if !w.shardEnabled {
+		return true
+	}
+
+	var bucket uint64
+	if w.shardKeyTmpl != nil {
+		buf := new(bytes.Buffer)
+		if err := w.shardKeyTmpl.Execute(buf, item); err != nil {
+			// On template error: fail-open (process), and log. Dropping
+			// silently would risk losing events; processing on every shard
+			// would duplicate. We pick "this shard handles it" so at least
+			// one shard sends it.
+			extra := utils.GetBasicLogExtraFields(componentName)
+			w.log.Error("error rendering sharding.keyTemplate, falling back to BinlogPosition", extra, err, false)
+			bucket = item.Log.BinlogPosition
+		} else {
+			h := fnv.New64a()
+			_, _ = h.Write(buf.Bytes())
+			bucket = h.Sum64()
+		}
+	} else {
+		bucket = item.Log.BinlogPosition
+	}
+
+	return bucket%w.shardCount == w.shardIndex
+}
+
 func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 	defer wg.Done()
 	extra := utils.GetBasicLogExtraFields(componentName)
@@ -108,6 +173,10 @@ func (w *BLSenderWorkT) Run(wg *sync.WaitGroup, ctx context.Context) {
 					continue
 				}
 				extra.Set("event", item)
+
+				if !w.shouldProcess(item) {
+					continue
+				}
 
 				for ri := range w.routs {
 					if slices.Contains(w.routs[ri].ops, item.Data.Operation) &&

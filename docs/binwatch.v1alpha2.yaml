@@ -38,6 +38,15 @@ source:
   #   position: 4 # binlog position in file to start
 
 
+sharding:
+  enabled: false # enable horizontal sharding of events across N instances
+  count: 1 # total number of shards (typically the StatefulSet replicaCount)
+  index: 0 # this instance's shard index, 0..count-1 (usually injected from pod ordinal)
+  # Optional: Go template used to compute the shard key per event. If empty,
+  # BinlogPosition is used (even distribution, no row-affinity).
+  # Recommended: hash by primary key so all updates to the same row share a shard.
+  keyTemplate: "" # e.g. '{{ (index .Data.Rows 0).id }}'
+
 connectors:
 - name: webhook-upsert # connector name
   type: webhook # connector type: webhook|google_pubsub
