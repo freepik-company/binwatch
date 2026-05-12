@@ -111,6 +111,13 @@ tolerations: []
 
 affinity: {}
 
+# The chart always injects, on top of whatever is set here:
+#   POD_NAME              - the pod name (downward API: metadata.name)
+#   BINWATCH_SHARD_INDEX  - pod ordinal (downward API: apps.kubernetes.io/pod-index label, K8s 1.28+)
+#   BINWATCH_SHARD_COUNT  - replicaCount as string
+# These are consumed by binwatch's `sharding` config via ${ENV:VAR}$
+# substitution. Safe to ignore if sharding is disabled in the binwatch
+# config.
 env: []
 # - name: MY_ENV_VAR
 #   value: my-env-var-value

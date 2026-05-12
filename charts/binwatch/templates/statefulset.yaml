@@ -54,6 +54,21 @@ spec:
           env:
             - name: SERVICE_NAME
               value: {{ include "binwatch.fullname" . }}-headless
+            # Shard identity for the binwatch `sharding` config block.
+            # POD_NAME -> consumed by binwatch as ${ENV:POD_NAME}$ to derive
+            # the ordinal at runtime if needed. BINWATCH_SHARD_INDEX is the
+            # canonical source, exposed via the StatefulSet pod-index label
+            # (Kubernetes 1.28+; stable in 1.30).
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: BINWATCH_SHARD_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+            - name: BINWATCH_SHARD_COUNT
+              value: {{ .Values.replicaCount | quote }}
             {{- with .Values.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
