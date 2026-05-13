@@ -55,6 +55,16 @@ spec:
           env:
             - name: SERVICE_NAME
               value: {{ include "binwatch.fullname" . }}-headless-replica
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: BINWATCH_SHARD_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+            - name: BINWATCH_SHARD_COUNT
+              value: {{ .Values.replicaCount | quote }}
             {{- with .Values.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
