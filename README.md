@@ -68,6 +68,10 @@ List of fields in v1alpha2 configuration:
 | `routes[].operations`                 | `[]string`            | List of database operations to route (INSERT, UPDATE, DELETE).                        |
 | `routes[].template`                   | `string`              | Go template used to render the message sent by the route.                             |
 | `routes[].dbTable`                    | `string`              | Database.Table name to send to the connector (e.g., "db.table" ).                     |
+| `sharding.enabled`                    | `bool`                | Enable horizontal sharding of events across N parallel instances.                     |
+| `sharding.count`                      | `uint64`              | Total number of shards. Typically the StatefulSet replicaCount.                       |
+| `sharding.index`                      | `uint64`              | This instance's shard index, 0..count-1. Usually injected from the pod ordinal.       |
+| `sharding.keyTemplate`                | `string`              | Optional Go template to derive the shard key. Empty = hash by BinlogPosition.         |
 
 ## Standalone
 
